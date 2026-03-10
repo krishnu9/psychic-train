@@ -1,0 +1,122 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../database/app_database.dart';
+import '../database/connection/connection.dart';
+import '../repositories/repositories.dart';
+import '../services/sync_service.dart';
+import '../services/supabase_service.dart';
+
+
+// ─── Database ────────────────────────────────────────────────────────────────
+
+final databaseProvider = Provider<AppDatabase>((ref) {
+  final db = AppDatabase(openDatabaseConnection());
+  ref.onDispose(() => db.close());
+  return db;
+});
+
+// ─── Sync ────────────────────────────────────────────────────────────────────
+
+final syncServiceProvider = Provider<SyncService>((ref) {
+  return SyncService(ref.watch(databaseProvider));
+});
+
+// ─── Repositories ────────────────────────────────────────────────────────────
+
+final exerciseRepositoryProvider = Provider<ExerciseRepository>((ref) {
+  return ExerciseRepository(ref.watch(databaseProvider), ref.watch(syncServiceProvider));
+});
+
+final routineRepositoryProvider = Provider<RoutineRepository>((ref) {
+  return RoutineRepository(ref.watch(databaseProvider), ref.watch(syncServiceProvider));
+});
+
+final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
+  return WorkoutRepository(ref.watch(databaseProvider), ref.watch(syncServiceProvider));
+});
+
+// ─── Exercise providers ──────────────────────────────────────────────────────
+
+final exercisesProvider = StreamProvider<List<Exercise>>((ref) {
+  return ref.watch(exerciseRepositoryProvider).watchAll();
+});
+
+final exerciseSearchProvider = FutureProvider.family<List<Exercise>, String>((ref, query) {
+  if (query.isEmpty) return ref.watch(exerciseRepositoryProvider).getAll();
+  return ref.watch(exerciseRepositoryProvider).search(query);
+});
+
+// ─── Routine providers ───────────────────────────────────────────────────────
+
+final routinesProvider = StreamProvider<List<Routine>>((ref) {
+  return ref.watch(routineRepositoryProvider).watchAll();
+});
+
+final routineExercisesProvider =
+    StreamProvider.family<List<RoutineExerciseEntry>, int>((ref, routineId) {
+  return ref.watch(routineRepositoryProvider).watchExercises(routineId);
+});
+
+// ─── Workout providers ───────────────────────────────────────────────────────
+
+final workoutsProvider = StreamProvider<List<Workout>>((ref) {
+  return ref.watch(workoutRepositoryProvider).watchAll();
+});
+
+final workoutSetsProvider =
+    StreamProvider.family<List<LoggedSet>, int>((ref, workoutId) {
+  return ref.watch(workoutRepositoryProvider).watchSets(workoutId);
+});
+
+// ─── Stats providers ─────────────────────────────────────────────────────────
+
+final workoutsThisWeekProvider = StreamProvider<int>((ref) {
+  return ref.watch(workoutRepositoryProvider).watchWorkoutsThisWeek();
+});
+
+final totalWorkoutsProvider = StreamProvider<int>((ref) {
+  return ref.watch(workoutRepositoryProvider).watchWorkoutCount();
+});
+
+// ─── UI state providers ──────────────────────────────────────────────────────
+
+/// Currently active workout ID (null if no workout in progress)
+final activeWorkoutIdProvider = StateProvider<int?>((ref) => null);
+
+/// Remembers the last selected category filter in the exercise picker
+final exercisePickerFilterProvider = StateProvider<String?>((ref) => null);
+
+/// Default rest timer duration in seconds
+final restTimerDurationProvider = StateProvider<int>((ref) => 90);
+
+/// Weight unit preference (false = kg, true = lbs)
+final useLbsProvider = StateProvider<bool>((ref) => false);
+
+// ─── Auth providers ──────────────────────────────────────────────────────────
+
+final authStateProvider = StreamProvider<AuthState>((ref) {
+  try {
+    return SupabaseService.onAuthStateChange;
+  } catch (_) {
+    return const Stream.empty(); // for tests
+  }
+});
+
+final isAuthenticatedProvider = Provider<bool>((ref) {
+  final authState = ref.watch(authStateProvider).valueOrNull;
+  try {
+    return authState?.session != null || SupabaseService.isAuthenticated;
+  } catch (_) {
+    return false; // for tests
+  }
+});
+
+final userEmailProvider = Provider<String>((ref) {
+  try {
+    return SupabaseService.currentUser?.email ?? 'Not logged in';
+  } catch (_) {
+    return 'test@example.com'; // for tests
+  }
+});
+
