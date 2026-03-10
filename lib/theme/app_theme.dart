@@ -32,6 +32,9 @@ class AppColors {
   static const Color divider = Color(0xFF1E293B);
   static const Color shimmer = Color(0xFF334155);
 
+  // Bento
+  static const double bentoRadius = 20.0;
+
   // Routine card palette
   static const List<Color> routineColors = [
     Color(0xFF6366F1), // indigo

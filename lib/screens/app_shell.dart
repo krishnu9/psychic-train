@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_theme.dart';
-import '../services/supabase_service.dart';
+
 import '../providers/providers.dart';
 import 'auth/auth_screen.dart';
 import 'home_screen.dart';
@@ -30,20 +29,25 @@ class _AppShellState extends ConsumerState<AppShell> {
     SettingsScreen(),
   ];
 
+  static const _navItems = [
+    _NavItem(icon: Icons.home_rounded, label: 'Home'),
+    _NavItem(icon: Icons.fitness_center_rounded, label: 'Exercises'),
+    _NavItem(icon: Icons.list_alt_rounded, label: 'Routines'),
+    _NavItem(icon: Icons.history_rounded, label: 'History'),
+    _NavItem(icon: Icons.settings_rounded, label: 'Settings'),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    // Trigger bulk sync whenever the auth state changes to signed-in
     ref.listen(authStateProvider, (prev, next) {
       if (next.valueOrNull?.session != null) {
-        final syncService = ref.read(syncServiceProvider);
-        // Pull data down from Supabase first
-        syncService.syncDown().then((_) {
-          // Then push local pending data up
-          syncService.syncAll();
-        });
-      }
-    });
-
+          final syncService = ref.read(syncServiceProvider);
+          syncService.syncDown().then((_) {
+            syncService.syncAll();
+          });
+        }
+      },
+    );
     final isAuthenticated = ref.watch(isAuthenticatedProvider);
     if (!isAuthenticated) return const AuthScreen();
 
@@ -52,40 +56,106 @@ class _AppShellState extends ConsumerState<AppShell> {
         index: _currentIndex,
         children: _screens,
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(
-            top: BorderSide(color: AppColors.divider, width: 0.5),
-          ),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.fitness_center_rounded),
-              label: 'Exercises',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.list_alt_rounded),
-              label: 'Routines',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history_rounded),
-              label: 'History',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings_rounded),
-              label: 'Settings',
-            ),
-          ],
-        ),
+      bottomNavigationBar: _FloatingNavBar(
+        currentIndex: _currentIndex,
+        items: _navItems,
+        onTap: (i) => setState(() => _currentIndex = i),
       ),
     );
   }
 }
 
+class _NavItem {
+  final IconData icon;
+  final String label;
+  const _NavItem({required this.icon, required this.label});
+}
+
+class _FloatingNavBar extends StatelessWidget {
+  final int currentIndex;
+  final List<_NavItem> items;
+  final ValueChanged<int> onTap;
+
+  const _FloatingNavBar({
+    required this.currentIndex,
+    required this.items,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+        child: Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBright,
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: AppColors.divider.withValues(alpha: 0.8),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: List.generate(items.length, (i) {
+              final item = items[i];
+              final selected = i == currentIndex;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onTap(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.primary.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedScale(
+                          scale: selected ? 1.15 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            item.icon,
+                            size: 22,
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                        if (selected) ...[
+                          const SizedBox(height: 2),
+                          Container(
+                            width: 4,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
