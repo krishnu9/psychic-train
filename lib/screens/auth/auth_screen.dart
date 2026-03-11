@@ -17,7 +17,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _submit() async {
     final email = _emailController.text.trim();
-    final password = _emailController.text;
+    final password = _passwordController.text;
     if (email.isEmpty || password.isEmpty) return;
 
     setState(() => _isLoading = true);
@@ -52,6 +52,30 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('An unexpected error occurred')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      await SupabaseService.signInWithGoogle();
+      // AppShell listens to auth state, so it will automatically navigate to home
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unexpected error: $e')),
         );
       }
     } finally {
@@ -99,20 +123,43 @@ class _AuthScreenState extends State<AuthScreen> {
               const SizedBox(height: 32),
               if (_isLoading)
                 const Center(child: CircularProgressIndicator())
-              else
+              else ...[
                 ElevatedButton(
                   onPressed: _submit,
                   child: Text(_isSignUp ? 'Sign Up' : 'Sign In'),
                 ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () {
-                  setState(() => _isSignUp = !_isSignUp);
-                },
-                child: Text(_isSignUp
-                    ? 'Already have an account? Sign in'
-                    : 'Need an account? Sign up'),
-              ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _isSignUp = !_isSignUp);
+                  },
+                  child: Text(_isSignUp
+                      ? 'Already have an account? Sign in'
+                      : 'Need an account? Sign up'),
+                ),
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    Expanded(child: Divider()),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('OR', style: TextStyle(color: Colors.grey)),
+                    ),
+                    Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _signInWithGoogle,
+                  icon: const Icon(Icons.g_mobiledata, size: 36),
+                  label: const Text('Continue with Google'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
