@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
 import '../../database/app_database.dart';
 import '../../models/tables.dart';
+import 'exercise_create_form.dart';
 
 class ExerciseListScreen extends ConsumerStatefulWidget {
   const ExerciseListScreen({super.key});
@@ -18,7 +19,8 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final exercisesAsync = ref.watch(exercisesProvider);
+    final exercisesAsync = ref.watch(filteredExercisesProvider);
+    final filterMode = ref.watch(exerciseFilterModeProvider);
 
     return SafeArea(
       child: Column(
@@ -36,7 +38,7 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
                       ),
                 ),
                 IconButton(
-                  onPressed: () => _showAddExerciseDialog(context, ref),
+                  onPressed: () => showCreateExerciseSheet(context, ref),
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -50,6 +52,36 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
               ],
             ),
           ),
+
+          // ─── Filter toggle: All / Global / My Exercises ─
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: 'All',
+                  selected: filterMode == ExerciseFilterMode.all,
+                  onTap: () => ref.read(exerciseFilterModeProvider.notifier).state =
+                      ExerciseFilterMode.all,
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Global',
+                  selected: filterMode == ExerciseFilterMode.global,
+                  onTap: () => ref.read(exerciseFilterModeProvider.notifier).state =
+                      ExerciseFilterMode.global,
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: 'My Exercises',
+                  selected: filterMode == ExerciseFilterMode.personal,
+                  onTap: () => ref.read(exerciseFilterModeProvider.notifier).state =
+                      ExerciseFilterMode.personal,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // ─── Search bar ────────────────────────────
           Padding(
@@ -174,80 +206,41 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
     );
   }
 
-  void _showAddExerciseDialog(BuildContext context, WidgetRef ref) {
-    final nameController = TextEditingController();
-    String category = ExerciseCategories.chest;
-    String equipment = EquipmentTypes.barbell;
+}
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-              20, 24, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Add Custom Exercise',
-                  style: Theme.of(ctx).textTheme.titleLarge),
-              const SizedBox(height: 20),
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(hintText: 'Exercise name'),
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                decoration: const InputDecoration(labelText: 'Category'),
-                dropdownColor: AppColors.surfaceLight,
-                items: ExerciseCategories.all
-                    .map((c) =>
-                        DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setSheetState(() => category = v);
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: equipment,
-                decoration: const InputDecoration(labelText: 'Equipment'),
-                dropdownColor: AppColors.surfaceLight,
-                items: EquipmentTypes.all
-                    .map((e) =>
-                        DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setSheetState(() => equipment = v);
-                },
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final name = nameController.text.trim();
-                    if (name.isEmpty) return;
-                    await ref.read(exerciseRepositoryProvider).create(
-                          name: name,
-                          category: category,
-                          targetMuscle: category,
-                          equipment: equipment,
-                        );
-                    if (ctx.mounted) Navigator.pop(ctx);
-                  },
-                  child: const Text('Add Exercise'),
-                ),
-              ),
-            ],
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.2)
+              : AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(20),
+          border: selected
+              ? Border.all(color: AppColors.primary, width: 1.5)
+              : Border.all(color: Colors.transparent, width: 1.5),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.primary : AppColors.textSecondary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            fontSize: 13,
           ),
         ),
       ),
@@ -298,7 +291,7 @@ class _CategoryChip extends StatelessWidget {
   }
 }
 
-class _ExerciseTile extends StatelessWidget {
+class _ExerciseTile extends ConsumerWidget {
   final Exercise exercise;
   const _ExerciseTile({required this.exercise});
 
@@ -320,7 +313,7 @@ class _ExerciseTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       decoration: BoxDecoration(
@@ -358,18 +351,56 @@ class _ExerciseTile extends StatelessWidget {
           ),
         ),
         trailing: exercise.isCustom
-            ? Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'Custom',
-                  style: TextStyle(
-                      color: AppColors.primary, fontSize: 11),
-                ),
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'Custom',
+                      style: TextStyle(
+                          color: AppColors.primary, fontSize: 11),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        color: AppColors.error, size: 20),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: AppColors.surface,
+                          title: const Text('Delete Exercise?'),
+                          content: Text(
+                              'Are you sure you want to delete "${exercise.name}"?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Delete',
+                                  style: TextStyle(color: AppColors.error)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await ref
+                            .read(exerciseRepositoryProvider)
+                            .delete(exercise.id);
+                      }
+                    },
+                  ),
+                ],
               )
             : null,
       ),

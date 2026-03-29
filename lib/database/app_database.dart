@@ -251,6 +251,34 @@ class AppDatabase extends _$AppDatabase {
 
   // ─── Workout DAO ───────────────────────────────────────────────────────────
 
+  Future<Workout?> getIncompleteWorkout() =>
+      (select(workouts)
+            ..where(
+                (w) => w.endTime.isNull() & w.isDeleted.equals(false))
+            ..orderBy([(w) => OrderingTerm.desc(w.startTime)])
+            ..limit(1))
+          .getSingleOrNull();
+
+  Stream<Workout?> watchIncompleteWorkout() =>
+      (select(workouts)
+            ..where(
+                (w) => w.endTime.isNull() & w.isDeleted.equals(false))
+            ..orderBy([(w) => OrderingTerm.desc(w.startTime)])
+            ..limit(1))
+          .watchSingleOrNull();
+
+  Stream<List<Exercise>> watchGlobalExercises() =>
+      (select(exercises)
+            ..where((e) =>
+                e.isDeleted.equals(false) & e.isCustom.equals(false)))
+          .watch();
+
+  Stream<List<Exercise>> watchCustomExercises() =>
+      (select(exercises)
+            ..where((e) =>
+                e.isDeleted.equals(false) & e.isCustom.equals(true)))
+          .watch();
+
   Future<List<Workout>> getAllWorkouts() => (select(workouts)
         ..where((w) => w.isDeleted.equals(false))
         ..orderBy([(w) => OrderingTerm.desc(w.startTime)]))

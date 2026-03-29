@@ -81,11 +81,49 @@ final totalWorkoutsProvider = StreamProvider<int>((ref) {
 
 // ─── UI state providers ──────────────────────────────────────────────────────
 
-/// Currently active workout ID (null if no workout in progress)
-final activeWorkoutIdProvider = StateProvider<int?>((ref) => null);
+/// Stream of the currently incomplete workout (null if none).
+final incompleteWorkoutProvider = StreamProvider<Workout?>((ref) {
+  return ref.watch(workoutRepositoryProvider).watchIncompleteWorkout();
+});
+
+/// Convenience: just the active workout ID, or null.
+final activeWorkoutIdProvider = Provider<int?>((ref) {
+  return ref.watch(incompleteWorkoutProvider).valueOrNull?.id;
+});
 
 /// Remembers the last selected category filter in the exercise picker
 final exercisePickerFilterProvider = StateProvider<String?>((ref) => null);
+
+/// Filter mode for exercise lists
+enum ExerciseFilterMode { all, global, personal }
+
+/// Current exercise filter mode
+final exerciseFilterModeProvider = StateProvider<ExerciseFilterMode>(
+  (ref) => ExerciseFilterMode.all,
+);
+
+/// Only global (pre-seeded) exercises
+final globalExercisesProvider = StreamProvider<List<Exercise>>((ref) {
+  return ref.watch(exerciseRepositoryProvider).watchGlobal();
+});
+
+/// Only personal (custom) exercises
+final personalExercisesProvider = StreamProvider<List<Exercise>>((ref) {
+  return ref.watch(exerciseRepositoryProvider).watchCustom();
+});
+
+/// Exercises filtered by the current filter mode
+final filteredExercisesProvider = Provider<AsyncValue<List<Exercise>>>((ref) {
+  final mode = ref.watch(exerciseFilterModeProvider);
+  switch (mode) {
+    case ExerciseFilterMode.all:
+      return ref.watch(exercisesProvider);
+    case ExerciseFilterMode.global:
+      return ref.watch(globalExercisesProvider);
+    case ExerciseFilterMode.personal:
+      return ref.watch(personalExercisesProvider);
+  }
+});
 
 /// Default rest timer duration in seconds
 final restTimerDurationProvider = StateProvider<int>((ref) => 90);

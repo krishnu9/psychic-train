@@ -15,12 +15,15 @@ void main() {
           workoutsThisWeekProvider.overrideWith((ref) => Stream.value(0)),
           totalWorkoutsProvider.overrideWith((ref) => Stream.value(0)),
           isAuthenticatedProvider.overrideWith((ref) => true),
+          authStateProvider.overrideWith((ref) => const Stream.empty()),
+          incompleteWorkoutProvider.overrideWith((ref) => Stream.value(null)),
         ],
         child: const GymApp(),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('GymApp'), findsOneWidget);
+    // The app renders successfully - verify a home screen element
+    expect(find.text('Ready to train?'), findsOneWidget);
   });
 }

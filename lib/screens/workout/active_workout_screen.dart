@@ -30,6 +30,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   late final Stopwatch _stopwatch;
   Timer? _elapsedTimer;
   String _elapsed = '00:00';
+  Duration _elapsedOffset = Duration.zero;
 
   // Rest timer
   Timer? _restTimer;
@@ -47,11 +48,144 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         setState(() {
-          _elapsed = Formatters.duration(_stopwatch.elapsed);
+          _elapsed = Formatters.duration(_stopwatch.elapsed + _elapsedOffset);
         });
       }
     });
-    _loadRoutineExercises();
+    _loadWorkoutStartTime();
+    _loadExistingSetsOrRoutine();
+  }
+
+  Future<void> _loadWorkoutStartTime() async {
+    final workout = await ref.read(workoutRepositoryProvider).getById(widget.workoutId);
+    if (workout != null && mounted) {
+      setState(() {
+        _elapsedOffset = DateTime.now().difference(workout.startTime);
+      });
+    }
+  }
+
+  Future<void> _loadExistingSetsOrRoutine() async {
+    final existingSets = await ref.read(workoutRepositoryProvider).getSets(widget.workoutId);
+    if (existingSets.isNotEmpty && widget.routineId != null) {
+      // Resuming a routine-based workout: merge routine template with logged sets
+      await _restoreRoutineWithProgress(existingSets);
+    } else if (existingSets.isNotEmpty) {
+      // Resuming an empty workout (no routine): only logged sets available
+      await _restoreFromLoggedSets(existingSets);
+    } else {
+      await _loadRoutineExercises();
+    }
+  }
+
+  Future<void> _restoreRoutineWithProgress(List<LoggedSet> loggedSets) async {
+    final exerciseRepo = ref.read(exerciseRepositoryProvider);
+    final routineRepo = ref.read(routineRepositoryProvider);
+    final workoutRepo = ref.read(workoutRepositoryProvider);
+
+    // Build lookup: exerciseId → logged sets for this workout
+    final loggedByExercise = <int, List<LoggedSet>>{};
+    for (final s in loggedSets) {
+      loggedByExercise.putIfAbsent(s.exerciseId, () => []).add(s);
+    }
+
+    // Load routine exercises in displayOrder
+    final routineExercises = await routineRepo.getExercises(widget.routineId!);
+    final routineExerciseIds = <int>{};
+
+    for (final re in routineExercises) {
+      routineExerciseIds.add(re.exerciseId);
+      final exercise = await exerciseRepo.getById(re.exerciseId);
+      if (exercise == null) continue;
+
+      final logged = loggedByExercise[re.exerciseId] ?? [];
+      final lastSets = await workoutRepo.getLastSetsForExercise(re.exerciseId);
+
+      final sets = <_SetData>[];
+
+      // Completed sets from the current workout (locked)
+      for (final s in logged) {
+        sets.add(_SetData(
+          setNumber: s.setNumber,
+          weight: s.weight,
+          reps: s.reps,
+          setType: s.setType,
+          isCompleted: true,
+        ));
+      }
+
+      // Remaining sets up to targetSets (editable, pre-filled)
+      for (var i = logged.length; i < re.targetSets; i++) {
+        final setNum = i + 1;
+        final lastSet = lastSets.where((s) => s.setNumber == setNum).firstOrNull;
+        sets.add(_SetData(
+          setNumber: setNum,
+          weight: lastSet?.weight ?? re.targetWeight,
+          reps: lastSet?.reps ?? re.targetReps,
+        ));
+      }
+
+      _exerciseDataList.add(_WorkoutExerciseData(
+        exercise: exercise,
+        sets: sets,
+        lastSets: lastSets,
+      ));
+    }
+
+    // Append any exercises added mid-workout that aren't part of the routine
+    for (final entry in loggedByExercise.entries) {
+      if (routineExerciseIds.contains(entry.key)) continue;
+      final exercise = await exerciseRepo.getById(entry.key);
+      if (exercise == null) continue;
+      final lastSets = await workoutRepo.getLastSetsForExercise(entry.key);
+      _exerciseDataList.add(_WorkoutExerciseData(
+        exercise: exercise,
+        sets: entry.value
+            .map((s) => _SetData(
+                  setNumber: s.setNumber,
+                  weight: s.weight,
+                  reps: s.reps,
+                  setType: s.setType,
+                  isCompleted: true,
+                ))
+            .toList(),
+        lastSets: lastSets,
+      ));
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _restoreFromLoggedSets(List<LoggedSet> loggedSets) async {
+    final exerciseRepo = ref.read(exerciseRepositoryProvider);
+    final grouped = <int, List<LoggedSet>>{};
+    for (final set in loggedSets) {
+      grouped.putIfAbsent(set.exerciseId, () => []).add(set);
+    }
+
+    for (final entry in grouped.entries) {
+      final exercise = await exerciseRepo.getById(entry.key);
+      if (exercise == null) continue;
+
+      final lastSets = await ref
+          .read(workoutRepositoryProvider)
+          .getLastSetsForExercise(entry.key);
+
+      _exerciseDataList.add(_WorkoutExerciseData(
+        exercise: exercise,
+        sets: entry.value
+            .map((s) => _SetData(
+                  setNumber: s.setNumber,
+                  weight: s.weight,
+                  reps: s.reps,
+                  setType: s.setType,
+                  isCompleted: true,
+                ))
+            .toList(),
+        lastSets: lastSets,
+      ));
+    }
+    setState(() => _isLoading = false);
   }
 
   Future<void> _loadRoutineExercises() async {
@@ -221,7 +355,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       await ref
           .read(workoutRepositoryProvider)
           .delete(widget.workoutId);
-      ref.read(activeWorkoutIdProvider.notifier).state = null;
       if (mounted) Navigator.pop(context);
     }
   }
@@ -275,7 +408,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
     if (confirmed == true) {
       await ref.read(workoutRepositoryProvider).finish(widget.workoutId);
-      ref.read(activeWorkoutIdProvider.notifier).state = null;
       // Invalidate stats
       ref.invalidate(workoutsThisWeekProvider);
       ref.invalidate(totalWorkoutsProvider);

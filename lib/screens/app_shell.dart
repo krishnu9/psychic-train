@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/app_theme.dart';
 
+import '../database/app_database.dart';
 import '../providers/providers.dart';
 import 'auth/auth_screen.dart';
 import 'home_screen.dart';
@@ -10,6 +11,7 @@ import 'exercises/exercise_list_screen.dart';
 import 'routines/routine_list_screen.dart';
 import 'history/history_screen.dart';
 import 'settings_screen.dart';
+import 'workout/active_workout_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -20,6 +22,7 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _currentIndex = 0;
+  bool _hasPromptedResume = false;
 
   final _screens = const [
     HomeScreen(),
@@ -37,6 +40,49 @@ class _AppShellState extends ConsumerState<AppShell> {
     _NavItem(icon: Icons.settings_rounded, label: 'Settings'),
   ];
 
+  Future<void> _showResumeWorkoutDialog(Workout workout) async {
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text('Incomplete Workout'),
+        content: const Text(
+          'You have an unfinished workout. Would you like to resume or discard it?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Discard',
+                style: TextStyle(color: AppColors.error)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Resume'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (result == true) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ActiveWorkoutScreen(
+            workoutId: workout.id,
+            routineId: workout.routineId,
+          ),
+        ),
+      );
+    } else {
+      await ref.read(workoutRepositoryProvider).delete(workout.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(authStateProvider, (prev, next) {
@@ -48,6 +94,17 @@ class _AppShellState extends ConsumerState<AppShell> {
         }
       },
     );
+    // Listen for incomplete workouts to prompt resume
+    ref.listen<AsyncValue<Workout?>>(incompleteWorkoutProvider, (prev, next) {
+      final workout = next.valueOrNull;
+      if (workout != null && !_hasPromptedResume && prev?.isLoading == true) {
+        _hasPromptedResume = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showResumeWorkoutDialog(workout);
+        });
+      }
+    });
+
     final isAuthenticated = ref.watch(isAuthenticatedProvider);
     if (!isAuthenticated) return const AuthScreen();
 

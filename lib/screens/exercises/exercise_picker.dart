@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
-
+import '../../database/app_database.dart';
 import '../../models/tables.dart';
+import 'exercise_create_form.dart';
 
 /// Bottom sheet for picking an exercise to add to a routine or workout.
 class ExercisePickerSheet extends ConsumerStatefulWidget {
@@ -16,10 +17,22 @@ class ExercisePickerSheet extends ConsumerStatefulWidget {
 
 class _ExercisePickerSheetState extends ConsumerState<ExercisePickerSheet> {
   String _search = '';
+  ExerciseFilterMode _filterMode = ExerciseFilterMode.all;
+
+  AsyncValue<List<Exercise>> _getFilteredExercises() {
+    switch (_filterMode) {
+      case ExerciseFilterMode.all:
+        return ref.watch(exercisesProvider);
+      case ExerciseFilterMode.global:
+        return ref.watch(globalExercisesProvider);
+      case ExerciseFilterMode.personal:
+        return ref.watch(personalExercisesProvider);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final exercisesAsync = ref.watch(exercisesProvider);
+    final exercisesAsync = _getFilteredExercises();
     final _categoryFilter = ref.watch(exercisePickerFilterProvider);
 
     return DraggableScrollableSheet(
@@ -47,6 +60,44 @@ class _ExercisePickerSheetState extends ConsumerState<ExercisePickerSheet> {
                 style: Theme.of(ctx).textTheme.titleLarge),
           ),
           const SizedBox(height: 12),
+
+          // Create New Exercise button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final newExercise =
+                    await showCreateExerciseSheet(context, ref);
+                if (newExercise != null && context.mounted) {
+                  Navigator.pop(context, newExercise);
+                }
+              },
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Create New Exercise'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 40),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Filter toggle: All / Global / My Exercises
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                _filterChip('All', _filterMode == ExerciseFilterMode.all,
+                    () => setState(() => _filterMode = ExerciseFilterMode.all)),
+                const SizedBox(width: 6),
+                _filterChip('Global', _filterMode == ExerciseFilterMode.global,
+                    () => setState(() => _filterMode = ExerciseFilterMode.global)),
+                const SizedBox(width: 6),
+                _filterChip('My Exercises', _filterMode == ExerciseFilterMode.personal,
+                    () => setState(() => _filterMode = ExerciseFilterMode.personal)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
 
           // Search
           Padding(
@@ -123,6 +174,32 @@ class _ExercisePickerSheetState extends ConsumerState<ExercisePickerSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.2)
+              : AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(16),
+          border: selected
+              ? Border.all(color: AppColors.primary, width: 1.5)
+              : Border.all(color: Colors.transparent, width: 1.5),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.primary : AppColors.textSecondary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            fontSize: 12,
+          ),
+        ),
       ),
     );
   }

@@ -50,9 +50,11 @@ class SupabaseService {
 
   /// Web: OAuth redirect flow via Supabase.
   static Future<void> _signInWithGoogleWeb() async {
+    final uri = Uri.base;
+    final redirectTo = '${uri.scheme}://${uri.host}${uri.port != 80 && uri.port != 443 ? ':${uri.port}' : ''}';
     await client.auth.signInWithOAuth(
       OAuthProvider.google,
-      redirectTo: 'https://tracking-app-489f8.web.app',
+      redirectTo: redirectTo,
     );
   }
 

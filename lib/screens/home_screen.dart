@@ -200,7 +200,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _startWorkout(int routineId) async {
     final repo = ref.read(workoutRepositoryProvider);
     final workoutId = await repo.start(routineId: routineId);
-    ref.read(activeWorkoutIdProvider.notifier).state = workoutId;
     if (mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -454,7 +453,6 @@ class _StartEmptyWorkoutBento extends StatelessWidget {
         onTap: () async {
           final repo = ref.read(workoutRepositoryProvider);
           final workoutId = await repo.start();
-          ref.read(activeWorkoutIdProvider.notifier).state = workoutId;
           if (context.mounted) {
             Navigator.of(context).push(
               MaterialPageRoute(

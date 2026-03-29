@@ -33,11 +33,35 @@ void main() {
   }
 
   group('StateProviders', () {
-    test('activeWorkoutIdProvider defaults to null and can be updated', () {
+    test('activeWorkoutIdProvider is null when no incomplete workout', () {
+      when(() => mockWorkoutRepo.watchIncompleteWorkout())
+          .thenAnswer((_) => Stream.value(null));
+
       final container = makeContainer();
+      container.listen(incompleteWorkoutProvider, (_, __) {});
       expect(container.read(activeWorkoutIdProvider), isNull);
-      container.read(activeWorkoutIdProvider.notifier).state = 1;
-      expect(container.read(activeWorkoutIdProvider), 1);
+    });
+
+    test('activeWorkoutIdProvider derives from incompleteWorkoutProvider', () async {
+      final fakeWorkout = Workout(
+        id: 42,
+        clientId: 'abc',
+        routineId: null,
+        startTime: DateTime.now(),
+        endTime: null,
+        notes: '',
+        lastModifiedAt: DateTime.now(),
+        syncStatus: 1,
+        isDeleted: false,
+      );
+      when(() => mockWorkoutRepo.watchIncompleteWorkout())
+          .thenAnswer((_) => Stream.value(fakeWorkout));
+
+      final container = makeContainer();
+      container.listen(incompleteWorkoutProvider, (_, __) {});
+
+      await container.read(incompleteWorkoutProvider.future);
+      expect(container.read(activeWorkoutIdProvider), 42);
     });
 
     test('restTimerDurationProvider defaults to 90 and can be updated', () {
@@ -86,6 +110,77 @@ void main() {
       );
       
       subscription.close();
+    });
+  });
+
+  group('ExerciseFilterProviders', () {
+    test('exerciseFilterModeProvider defaults to all', () {
+      final container = makeContainer();
+      expect(container.read(exerciseFilterModeProvider), ExerciseFilterMode.all);
+    });
+
+    test('filteredExercisesProvider uses globalExercisesProvider when set to global', () async {
+      final globalExercises = [
+        Exercise(
+          id: 1,
+          clientId: 'a',
+          name: 'Bench Press',
+          category: 'Chest',
+          targetMuscle: 'Chest',
+          equipment: 'Barbell',
+          isCustom: false,
+          lastModifiedAt: DateTime.now(),
+          syncStatus: 0,
+          isDeleted: false,
+        )
+      ];
+
+      when(() => mockExerciseRepo.watchGlobal())
+          .thenAnswer((_) => Stream.value(globalExercises));
+      when(() => mockExerciseRepo.watchAll())
+          .thenAnswer((_) => Stream.value(globalExercises));
+
+      final container = makeContainer();
+      container.read(exerciseFilterModeProvider.notifier).state =
+          ExerciseFilterMode.global;
+
+      container.listen(globalExercisesProvider, (_, __) {});
+      await container.read(globalExercisesProvider.future);
+
+      final filtered = container.read(filteredExercisesProvider);
+      expect(filtered.valueOrNull, globalExercises);
+    });
+
+    test('filteredExercisesProvider uses personalExercisesProvider when set to personal', () async {
+      final customExercises = [
+        Exercise(
+          id: 100,
+          clientId: 'b',
+          name: 'My Custom Curl',
+          category: 'Biceps',
+          targetMuscle: 'Biceps',
+          equipment: 'Dumbbell',
+          isCustom: true,
+          lastModifiedAt: DateTime.now(),
+          syncStatus: 0,
+          isDeleted: false,
+        )
+      ];
+
+      when(() => mockExerciseRepo.watchCustom())
+          .thenAnswer((_) => Stream.value(customExercises));
+      when(() => mockExerciseRepo.watchAll())
+          .thenAnswer((_) => Stream.value(customExercises));
+
+      final container = makeContainer();
+      container.read(exerciseFilterModeProvider.notifier).state =
+          ExerciseFilterMode.personal;
+
+      container.listen(personalExercisesProvider, (_, __) {});
+      await container.read(personalExercisesProvider.future);
+
+      final filtered = container.read(filteredExercisesProvider);
+      expect(filtered.valueOrNull, customExercises);
     });
   });
 }

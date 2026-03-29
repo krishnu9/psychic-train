@@ -14,6 +14,8 @@ class ExerciseRepository {
 
   Future<List<Exercise>> getAll() => _db.getAllExercises();
   Stream<List<Exercise>> watchAll() => _db.watchAllExercises();
+  Stream<List<Exercise>> watchGlobal() => _db.watchGlobalExercises();
+  Stream<List<Exercise>> watchCustom() => _db.watchCustomExercises();
   Future<List<Exercise>> search(String query) => _db.searchExercises(query);
   Future<List<Exercise>> getByCategory(String cat) => _db.getExercisesByCategory(cat);
   Future<Exercise?> getById(int id) => _db.getExerciseById(id);
@@ -157,6 +159,8 @@ class WorkoutRepository {
   Future<List<Workout>> getAll() => _db.getAllWorkouts();
   Stream<List<Workout>> watchAll() => _db.watchAllWorkouts();
   Future<Workout?> getById(int id) => _db.getWorkoutById(id);
+  Future<Workout?> getIncompleteWorkout() => _db.getIncompleteWorkout();
+  Stream<Workout?> watchIncompleteWorkout() => _db.watchIncompleteWorkout();
 
   Future<int> start({int? routineId}) async {
     final id = await _db.insertWorkout(WorkoutsCompanion(
