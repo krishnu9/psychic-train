@@ -1,3 +1,5 @@
 {
-  "projects": {}
+  "projects": {
+    "default": "tracking-app-489f8"
+  }
 }

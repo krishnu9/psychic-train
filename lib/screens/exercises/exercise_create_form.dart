@@ -29,12 +29,14 @@ class _CreateExerciseForm extends StatefulWidget {
 
 class _CreateExerciseFormState extends State<_CreateExerciseForm> {
   final _nameController = TextEditingController();
+  final _descController = TextEditingController();
   String _category = ExerciseCategories.chest;
   String _equipment = EquipmentTypes.barbell;
 
   @override
   void dispose() {
     _nameController.dispose();
+    _descController.dispose();
     super.dispose();
   }
 
@@ -55,6 +57,16 @@ class _CreateExerciseFormState extends State<_CreateExerciseForm> {
             decoration: const InputDecoration(hintText: 'Exercise name'),
             autofocus: true,
             textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _descController,
+            decoration: const InputDecoration(
+              hintText: 'Description (optional)',
+              labelText: 'Description',
+            ),
+            maxLines: 2,
+            textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
@@ -93,6 +105,7 @@ class _CreateExerciseFormState extends State<_CreateExerciseForm> {
                   category: _category,
                   targetMuscle: _category,
                   equipment: _equipment,
+                  description: _descController.text.trim(),
                 );
                 final exercise = await repo.getById(id);
                 if (context.mounted) Navigator.pop(context, exercise);

@@ -12,7 +12,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -27,6 +27,10 @@ class AppDatabase extends _$AppDatabase {
             await (update(exercises)..where((e) => e.isCustom.equals(false) & e.syncStatus.equals(0))).write(
               const ExercisesCompanion(syncStatus: Value(1)),
             );
+          }
+          if (from < 3) {
+            await m.addColumn(exercises, exercises.description);
+            await m.addColumn(routineExercises, routineExercises.sectionName);
           }
         },
       );

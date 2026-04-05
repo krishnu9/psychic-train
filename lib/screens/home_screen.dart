@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../providers/providers.dart';
@@ -275,11 +276,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                         if (routine.description.isNotEmpty)
-                          Text(
-                            routine.description,
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 13,
+                          MarkdownBody(
+                            data: routine.description,
+                            shrinkWrap: true,
+                            styleSheet: MarkdownStyleSheet(
+                              p: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                       ],

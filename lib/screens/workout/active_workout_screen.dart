@@ -103,7 +103,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
       final sets = <_SetData>[];
 
-      // Completed sets from the current workout (locked)
+      // Completed sets from the current workout
       for (final s in logged) {
         sets.add(_SetData(
           setNumber: s.setNumber,
@@ -111,6 +111,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           reps: s.reps,
           setType: s.setType,
           isCompleted: true,
+          loggedSetId: s.id,
         ));
       }
 
@@ -129,6 +130,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         exercise: exercise,
         sets: sets,
         lastSets: lastSets,
+        sectionName: re.sectionName,
       ));
     }
 
@@ -147,6 +149,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                   reps: s.reps,
                   setType: s.setType,
                   isCompleted: true,
+                  loggedSetId: s.id,
                 ))
             .toList(),
         lastSets: lastSets,
@@ -180,6 +183,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                   reps: s.reps,
                   setType: s.setType,
                   isCompleted: true,
+                  loggedSetId: s.id,
                 ))
             .toList(),
         lastSets: lastSets,
@@ -220,6 +224,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           exercise: exercise,
           sets: sets,
           lastSets: lastSets,
+          sectionName: re.sectionName,
         ));
       }
     }
@@ -264,7 +269,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     if (setData.isCompleted) return;
 
     // Log to database
-    await ref.read(workoutRepositoryProvider).logSet(
+    final id = await ref.read(workoutRepositoryProvider).logSet(
           workoutId: widget.workoutId,
           exerciseId: exData.exercise.id,
           setNumber: setData.setNumber,
@@ -275,10 +280,38 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
     setState(() {
       setData.isCompleted = true;
+      setData.loggedSetId = id;
     });
 
     HapticFeedback.mediumImpact();
     _startRestTimer();
+  }
+
+  Future<void> _uncompleteSet(int exerciseIndex, int setIndex) async {
+    final exData = _exerciseDataList[exerciseIndex];
+    final setData = exData.sets[setIndex];
+
+    if (!setData.isCompleted) return;
+
+    if (setData.loggedSetId != null) {
+      await ref.read(workoutRepositoryProvider).deleteSet(setData.loggedSetId!);
+    }
+
+    setState(() {
+      setData.isCompleted = false;
+      setData.loggedSetId = null;
+    });
+  }
+
+  Future<void> _updateSet(int exerciseIndex, int setIndex) async {
+    final exData = _exerciseDataList[exerciseIndex];
+    final setData = exData.sets[setIndex];
+    if (setData.loggedSetId == null) return;
+    await ref.read(workoutRepositoryProvider).updateSet(
+          setData.loggedSetId!,
+          weight: setData.weight,
+          reps: setData.reps,
+        );
   }
 
   void _addSetToExercise(int exerciseIndex) {
@@ -487,17 +520,56 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                       ),
                                     );
                                   }
-                                  return _ExerciseCard(
-                                    data: _exerciseDataList[index],
-                                    exerciseIndex: index,
-                                    useLbs: useLbs,
-                                    onCompleteSet: _completeSet,
-                                    onAddSet: _addSetToExercise,
-                                    onRemove: () {
-                                      setState(() {
-                                        _exerciseDataList.removeAt(index);
-                                      });
-                                    },
+                                  final data = _exerciseDataList[index];
+                                  final prevSection = index > 0
+                                      ? _exerciseDataList[index - 1].sectionName
+                                      : '';
+                                  final showHeader = data.sectionName.isNotEmpty &&
+                                      data.sectionName != prevSection;
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (showHeader)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 4,
+                                                height: 16,
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.primary,
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                data.sectionName,
+                                                style: const TextStyle(
+                                                  color: AppColors.primary,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 13,
+                                                  letterSpacing: 0.3,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      _ExerciseCard(
+                                        data: data,
+                                        exerciseIndex: index,
+                                        useLbs: useLbs,
+                                        onCompleteSet: _completeSet,
+                                        onUncompleteSet: _uncompleteSet,
+                                        onUpdateSet: _updateSet,
+                                        onAddSet: _addSetToExercise,
+                                        onRemove: () {
+                                          setState(() {
+                                            _exerciseDataList.removeAt(index);
+                                          });
+                                        },
+                                      ),
+                                    ],
                                   );
                                 },
                               ),
@@ -530,11 +602,13 @@ class _WorkoutExerciseData {
   final Exercise exercise;
   final List<_SetData> sets;
   final List<LoggedSet> lastSets;
+  final String sectionName;
 
   _WorkoutExerciseData({
     required this.exercise,
     required this.sets,
     required this.lastSets,
+    this.sectionName = '',
   });
 }
 
@@ -544,6 +618,7 @@ class _SetData {
   int reps;
   int setType;
   bool isCompleted;
+  int? loggedSetId;
 
   _SetData({
     required this.setNumber,
@@ -551,6 +626,7 @@ class _SetData {
     required this.reps,
     this.setType = 0,
     this.isCompleted = false,
+    this.loggedSetId,
   });
 }
 
@@ -638,6 +714,8 @@ class _ExerciseCard extends StatelessWidget {
   final int exerciseIndex;
   final bool useLbs;
   final Future<void> Function(int, int) onCompleteSet;
+  final Future<void> Function(int, int) onUncompleteSet;
+  final Future<void> Function(int, int) onUpdateSet;
   final void Function(int) onAddSet;
   final VoidCallback onRemove;
 
@@ -646,6 +724,8 @@ class _ExerciseCard extends StatelessWidget {
     required this.exerciseIndex,
     required this.useLbs,
     required this.onCompleteSet,
+    required this.onUncompleteSet,
+    required this.onUpdateSet,
     required this.onAddSet,
     required this.onRemove,
   });
@@ -725,6 +805,8 @@ class _ExerciseCard extends StatelessWidget {
               setData: setData,
               useLbs: useLbs,
               onComplete: () => onCompleteSet(exerciseIndex, setIndex),
+              onUncomplete: () => onUncompleteSet(exerciseIndex, setIndex),
+              onUpdateSet: () => onUpdateSet(exerciseIndex, setIndex),
               onWeightChanged: (v) => setData.weight = v,
               onRepsChanged: (v) => setData.reps = v,
             );
@@ -775,6 +857,8 @@ class _SetRow extends StatefulWidget {
   final _SetData setData;
   final bool useLbs;
   final VoidCallback onComplete;
+  final VoidCallback onUncomplete;
+  final VoidCallback onUpdateSet;
   final ValueChanged<double> onWeightChanged;
   final ValueChanged<int> onRepsChanged;
 
@@ -782,6 +866,8 @@ class _SetRow extends StatefulWidget {
     required this.setData,
     required this.useLbs,
     required this.onComplete,
+    required this.onUncomplete,
+    required this.onUpdateSet,
     required this.onWeightChanged,
     required this.onRepsChanged,
   });
@@ -848,7 +934,6 @@ class _SetRowState extends State<_SetRow> {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: TextField(
                 controller: _weightCtrl,
-                enabled: !isCompleted,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 textAlign: TextAlign.center,
@@ -874,6 +959,7 @@ class _SetRowState extends State<_SetRow> {
                 ),
                 onChanged: (v) {
                   widget.onWeightChanged(double.tryParse(v) ?? 0);
+                  if (isCompleted) widget.onUpdateSet();
                 },
               ),
             ),
@@ -885,7 +971,6 @@ class _SetRowState extends State<_SetRow> {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: TextField(
                 controller: _repsCtrl,
-                enabled: !isCompleted,
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -910,16 +995,17 @@ class _SetRowState extends State<_SetRow> {
                 ),
                 onChanged: (v) {
                   widget.onRepsChanged(int.tryParse(v) ?? 0);
+                  if (isCompleted) widget.onUpdateSet();
                 },
               ),
             ),
           ),
 
-          // Check button – large, thumb-friendly
+          // Check button – tap to log; tap again to un-log
           SizedBox(
             width: 52,
             child: GestureDetector(
-              onTap: isCompleted ? null : widget.onComplete,
+              onTap: isCompleted ? widget.onUncomplete : widget.onComplete,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 width: 40,

@@ -25,6 +25,7 @@ class ExerciseRepository {
     required String category,
     required String targetMuscle,
     required String equipment,
+    String description = '',
   }) async {
     final id = await _db.insertExercise(ExercisesCompanion.insert(
       clientId: '', // will be overwritten by DB
@@ -32,6 +33,7 @@ class ExerciseRepository {
       category: category,
       targetMuscle: targetMuscle,
       equipment: equipment,
+      description: Value(description),
       lastModifiedAt: DateTime.now(), // overwritten by DB
       isCustom: const Value(true),
     ));
@@ -122,7 +124,7 @@ class RoutineRepository {
       _db.watchRoutineExercises(routineId);
 
   Future<int> addExercise(int routineId, int exerciseId, int order,
-          {int sets = 3, int reps = 10, double weight = 0}) async {
+          {int sets = 3, int reps = 10, double weight = 0, String sectionName = ''}) async {
     final id = await _db.insertRoutineExercise(RoutineExercisesCompanion(
       routineId: Value(routineId),
       exerciseId: Value(exerciseId),
@@ -130,18 +132,20 @@ class RoutineRepository {
       targetSets: Value(sets),
       targetReps: Value(reps),
       targetWeight: Value(weight),
+      sectionName: Value(sectionName),
     ));
     // Defer push to background sync to keep UI fast
     return id;
   }
 
   Future<void> updateExercise(int id,
-          {int? sets, int? reps, double? weight}) async {
+          {int? sets, int? reps, double? weight, String? sectionName}) async {
     await _db.updateRoutineExercise(RoutineExercisesCompanion(
       id: Value(id),
       targetSets: sets != null ? Value(sets) : const Value.absent(),
       targetReps: reps != null ? Value(reps) : const Value.absent(),
       targetWeight: weight != null ? Value(weight) : const Value.absent(),
+      sectionName: sectionName != null ? Value(sectionName) : const Value.absent(),
     ));
   }
 

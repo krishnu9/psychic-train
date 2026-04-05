@@ -79,6 +79,7 @@ class Exercises extends Table {
   TextColumn get category => text()();
   TextColumn get targetMuscle => text()();
   TextColumn get equipment => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
   BoolColumn get isCustom => boolean().withDefault(const Constant(false))();
 
   // Sync-ready columns
@@ -112,6 +113,7 @@ class RoutineExercises extends Table {
   IntColumn get targetSets => integer().withDefault(const Constant(3))();
   IntColumn get targetReps => integer().withDefault(const Constant(10))();
   RealColumn get targetWeight => real().withDefault(const Constant(0.0))();
+  TextColumn get sectionName => text().withDefault(const Constant(''))();
 
   // Sync-ready columns
   DateTimeColumn get lastModifiedAt => dateTime()();

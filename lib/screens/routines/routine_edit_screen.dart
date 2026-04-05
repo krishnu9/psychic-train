@@ -147,10 +147,20 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                       children: [
                         Text('Exercises',
                             style: Theme.of(context).textTheme.titleMedium),
-                        TextButton.icon(
-                          onPressed: () => _addExercise(context),
-                          icon: const Icon(Icons.add_rounded, size: 18),
-                          label: const Text('Add'),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => _addSection(context),
+                              icon: const Icon(Icons.label_outline_rounded, size: 18),
+                              label: const Text('Section'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _addExercise(context),
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text('Add'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -196,9 +206,16 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                             },
                             itemBuilder: (ctx, index) {
                               final entry = entries[index];
+                              final prevSection = index > 0
+                                  ? entries[index - 1].sectionName
+                                  : '';
+                              final showHeader =
+                                  entry.sectionName.isNotEmpty &&
+                                      entry.sectionName != prevSection;
                               return _RoutineExerciseItem(
                                 key: ValueKey(entry.id),
                                 entry: entry,
+                                showSectionHeader: showHeader,
                                 onDelete: () async {
                                   await ref
                                       .read(routineRepositoryProvider)
@@ -211,6 +228,12 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                                           sets: sets,
                                           reps: reps,
                                           weight: weight);
+                                },
+                                onSectionChanged: (section) async {
+                                  await ref
+                                      .read(routineRepositoryProvider)
+                                      .updateExercise(entry.id,
+                                          sectionName: section);
                                 },
                               );
                             },
@@ -290,25 +313,80 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
     if (selected != null && widget.routineId != null) {
       final entries =
           await ref.read(routineRepositoryProvider).getExercises(widget.routineId!);
+      final section = _pendingSection.isNotEmpty
+          ? _pendingSection
+          : entries.isNotEmpty ? entries.last.sectionName : '';
       await ref.read(routineRepositoryProvider).addExercise(
             widget.routineId!,
             selected.id,
             entries.length,
+            sectionName: section,
           );
     }
   }
+
+  void _addSection(BuildContext context) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('New Section'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Section name'),
+          textCapitalization: TextCapitalization.words,
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty || widget.routineId == null) return;
+
+    // Update the next added exercise to use this section,
+    // or if there are existing exercises, set the last one's section
+    // to create a visible section break
+    final entries =
+        await ref.read(routineRepositoryProvider).getExercises(widget.routineId!);
+    if (entries.isNotEmpty) {
+      // Set section on the last exercise so the next added exercise inherits it
+      await ref.read(routineRepositoryProvider).updateExercise(
+            entries.last.id,
+            sectionName: name,
+          );
+    }
+    // Store the section name for next exercise additions
+    setState(() => _pendingSection = name);
+  }
+
+  String _pendingSection = '';
 }
 
 class _RoutineExerciseItem extends ConsumerStatefulWidget {
   final RoutineExerciseEntry entry;
+  final bool showSectionHeader;
   final VoidCallback onDelete;
   final void Function(int? sets, int? reps, double? weight) onUpdate;
+  final void Function(String section) onSectionChanged;
 
   const _RoutineExerciseItem({
     super.key,
     required this.entry,
+    this.showSectionHeader = false,
     required this.onDelete,
     required this.onUpdate,
+    required this.onSectionChanged,
   });
 
   @override
@@ -371,7 +449,35 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
       error: (_, _) => 'Error',
     );
 
-    return Container(
+    return Column(
+      children: [
+        if (widget.showSectionHeader)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6, top: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  widget.entry.sectionName,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -441,6 +547,8 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
           ),
         ],
       ),
+    ),
+      ],
     );
   }
 
@@ -451,6 +559,30 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
         children: [
           const Divider(height: 1, color: AppColors.divider),
           const SizedBox(height: 8),
+
+          // Section name field
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: TextField(
+              controller: TextEditingController(text: widget.entry.sectionName),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.surfaceLight,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                hintText: 'Section (optional)',
+                hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                prefixIcon: const Icon(Icons.label_outline_rounded,
+                    color: AppColors.textMuted, size: 18),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 13),
+              onChanged: (v) => widget.onSectionChanged(v.trim()),
+            ),
+          ),
 
           // Column headers
           const Padding(

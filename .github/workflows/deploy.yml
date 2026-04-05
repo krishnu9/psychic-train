@@ -1,0 +1,38 @@
+name: Deploy to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: pubspec.yaml
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create .env file from secrets
+        run: |
+          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\n' \
+            "${{ secrets.SUPABASE_URL }}" \
+            "${{ secrets.SUPABASE_ANON_KEY }}" > .env
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build Flutter web (release)
+        run: flutter build web --release
+
+      - name: Deploy to Firebase Hosting
+        run: npx firebase-tools deploy --only hosting --project tracking-app-489f8 --token "${{ secrets.FIREBASE_TOKEN }}" --non-interactive

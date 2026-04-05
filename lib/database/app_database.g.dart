@@ -79,6 +79,18 @@ class $ExercisesTable extends Exercises
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _isCustomMeta = const VerificationMeta(
     'isCustom',
   );
@@ -141,6 +153,7 @@ class $ExercisesTable extends Exercises
     category,
     targetMuscle,
     equipment,
+    description,
     isCustom,
     lastModifiedAt,
     syncStatus,
@@ -204,6 +217,15 @@ class $ExercisesTable extends Exercises
     } else if (isInserting) {
       context.missing(_equipmentMeta);
     }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_custom')) {
       context.handle(
         _isCustomMeta,
@@ -266,6 +288,10 @@ class $ExercisesTable extends Exercises
         DriftSqlType.string,
         data['${effectivePrefix}equipment'],
       )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
       isCustom: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_custom'],
@@ -298,6 +324,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
   final String category;
   final String targetMuscle;
   final String equipment;
+  final String description;
   final bool isCustom;
   final DateTime lastModifiedAt;
   final int syncStatus;
@@ -309,6 +336,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
     required this.category,
     required this.targetMuscle,
     required this.equipment,
+    required this.description,
     required this.isCustom,
     required this.lastModifiedAt,
     required this.syncStatus,
@@ -323,6 +351,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
     map['category'] = Variable<String>(category);
     map['target_muscle'] = Variable<String>(targetMuscle);
     map['equipment'] = Variable<String>(equipment);
+    map['description'] = Variable<String>(description);
     map['is_custom'] = Variable<bool>(isCustom);
     map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
     map['sync_status'] = Variable<int>(syncStatus);
@@ -338,6 +367,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
       category: Value(category),
       targetMuscle: Value(targetMuscle),
       equipment: Value(equipment),
+      description: Value(description),
       isCustom: Value(isCustom),
       lastModifiedAt: Value(lastModifiedAt),
       syncStatus: Value(syncStatus),
@@ -357,6 +387,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
       category: serializer.fromJson<String>(json['category']),
       targetMuscle: serializer.fromJson<String>(json['targetMuscle']),
       equipment: serializer.fromJson<String>(json['equipment']),
+      description: serializer.fromJson<String>(json['description']),
       isCustom: serializer.fromJson<bool>(json['isCustom']),
       lastModifiedAt: serializer.fromJson<DateTime>(json['lastModifiedAt']),
       syncStatus: serializer.fromJson<int>(json['syncStatus']),
@@ -373,6 +404,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
       'category': serializer.toJson<String>(category),
       'targetMuscle': serializer.toJson<String>(targetMuscle),
       'equipment': serializer.toJson<String>(equipment),
+      'description': serializer.toJson<String>(description),
       'isCustom': serializer.toJson<bool>(isCustom),
       'lastModifiedAt': serializer.toJson<DateTime>(lastModifiedAt),
       'syncStatus': serializer.toJson<int>(syncStatus),
@@ -387,6 +419,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
     String? category,
     String? targetMuscle,
     String? equipment,
+    String? description,
     bool? isCustom,
     DateTime? lastModifiedAt,
     int? syncStatus,
@@ -398,6 +431,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
     category: category ?? this.category,
     targetMuscle: targetMuscle ?? this.targetMuscle,
     equipment: equipment ?? this.equipment,
+    description: description ?? this.description,
     isCustom: isCustom ?? this.isCustom,
     lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
     syncStatus: syncStatus ?? this.syncStatus,
@@ -413,6 +447,9 @@ class Exercise extends DataClass implements Insertable<Exercise> {
           ? data.targetMuscle.value
           : this.targetMuscle,
       equipment: data.equipment.present ? data.equipment.value : this.equipment,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
       isCustom: data.isCustom.present ? data.isCustom.value : this.isCustom,
       lastModifiedAt: data.lastModifiedAt.present
           ? data.lastModifiedAt.value
@@ -433,6 +470,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
           ..write('category: $category, ')
           ..write('targetMuscle: $targetMuscle, ')
           ..write('equipment: $equipment, ')
+          ..write('description: $description, ')
           ..write('isCustom: $isCustom, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
@@ -449,6 +487,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
     category,
     targetMuscle,
     equipment,
+    description,
     isCustom,
     lastModifiedAt,
     syncStatus,
@@ -464,6 +503,7 @@ class Exercise extends DataClass implements Insertable<Exercise> {
           other.category == this.category &&
           other.targetMuscle == this.targetMuscle &&
           other.equipment == this.equipment &&
+          other.description == this.description &&
           other.isCustom == this.isCustom &&
           other.lastModifiedAt == this.lastModifiedAt &&
           other.syncStatus == this.syncStatus &&
@@ -477,6 +517,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
   final Value<String> category;
   final Value<String> targetMuscle;
   final Value<String> equipment;
+  final Value<String> description;
   final Value<bool> isCustom;
   final Value<DateTime> lastModifiedAt;
   final Value<int> syncStatus;
@@ -488,6 +529,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
     this.category = const Value.absent(),
     this.targetMuscle = const Value.absent(),
     this.equipment = const Value.absent(),
+    this.description = const Value.absent(),
     this.isCustom = const Value.absent(),
     this.lastModifiedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
@@ -500,6 +542,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
     required String category,
     required String targetMuscle,
     required String equipment,
+    this.description = const Value.absent(),
     this.isCustom = const Value.absent(),
     required DateTime lastModifiedAt,
     this.syncStatus = const Value.absent(),
@@ -517,6 +560,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
     Expression<String>? category,
     Expression<String>? targetMuscle,
     Expression<String>? equipment,
+    Expression<String>? description,
     Expression<bool>? isCustom,
     Expression<DateTime>? lastModifiedAt,
     Expression<int>? syncStatus,
@@ -529,6 +573,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
       if (category != null) 'category': category,
       if (targetMuscle != null) 'target_muscle': targetMuscle,
       if (equipment != null) 'equipment': equipment,
+      if (description != null) 'description': description,
       if (isCustom != null) 'is_custom': isCustom,
       if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
       if (syncStatus != null) 'sync_status': syncStatus,
@@ -543,6 +588,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
     Value<String>? category,
     Value<String>? targetMuscle,
     Value<String>? equipment,
+    Value<String>? description,
     Value<bool>? isCustom,
     Value<DateTime>? lastModifiedAt,
     Value<int>? syncStatus,
@@ -555,6 +601,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
       category: category ?? this.category,
       targetMuscle: targetMuscle ?? this.targetMuscle,
       equipment: equipment ?? this.equipment,
+      description: description ?? this.description,
       isCustom: isCustom ?? this.isCustom,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       syncStatus: syncStatus ?? this.syncStatus,
@@ -583,6 +630,9 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
     if (equipment.present) {
       map['equipment'] = Variable<String>(equipment.value);
     }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
     if (isCustom.present) {
       map['is_custom'] = Variable<bool>(isCustom.value);
     }
@@ -607,6 +657,7 @@ class ExercisesCompanion extends UpdateCompanion<Exercise> {
           ..write('category: $category, ')
           ..write('targetMuscle: $targetMuscle, ')
           ..write('equipment: $equipment, ')
+          ..write('description: $description, ')
           ..write('isCustom: $isCustom, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
@@ -1281,6 +1332,18 @@ class $RoutineExercisesTable extends RoutineExercises
     requiredDuringInsert: false,
     defaultValue: const Constant(0.0),
   );
+  static const VerificationMeta _sectionNameMeta = const VerificationMeta(
+    'sectionName',
+  );
+  @override
+  late final GeneratedColumn<String> sectionName = GeneratedColumn<String>(
+    'section_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _lastModifiedAtMeta = const VerificationMeta(
     'lastModifiedAt',
   );
@@ -1330,6 +1393,7 @@ class $RoutineExercisesTable extends RoutineExercises
     targetSets,
     targetReps,
     targetWeight,
+    sectionName,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -1403,6 +1467,15 @@ class $RoutineExercisesTable extends RoutineExercises
         ),
       );
     }
+    if (data.containsKey('section_name')) {
+      context.handle(
+        _sectionNameMeta,
+        sectionName.isAcceptableOrUnknown(
+          data['section_name']!,
+          _sectionNameMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_modified_at')) {
       context.handle(
         _lastModifiedAtMeta,
@@ -1467,6 +1540,10 @@ class $RoutineExercisesTable extends RoutineExercises
         DriftSqlType.double,
         data['${effectivePrefix}target_weight'],
       )!,
+      sectionName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}section_name'],
+      )!,
       lastModifiedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_modified_at'],
@@ -1498,6 +1575,7 @@ class RoutineExerciseEntry extends DataClass
   final int targetSets;
   final int targetReps;
   final double targetWeight;
+  final String sectionName;
   final DateTime lastModifiedAt;
   final int syncStatus;
   final bool isDeleted;
@@ -1510,6 +1588,7 @@ class RoutineExerciseEntry extends DataClass
     required this.targetSets,
     required this.targetReps,
     required this.targetWeight,
+    required this.sectionName,
     required this.lastModifiedAt,
     required this.syncStatus,
     required this.isDeleted,
@@ -1525,6 +1604,7 @@ class RoutineExerciseEntry extends DataClass
     map['target_sets'] = Variable<int>(targetSets);
     map['target_reps'] = Variable<int>(targetReps);
     map['target_weight'] = Variable<double>(targetWeight);
+    map['section_name'] = Variable<String>(sectionName);
     map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
     map['sync_status'] = Variable<int>(syncStatus);
     map['is_deleted'] = Variable<bool>(isDeleted);
@@ -1541,6 +1621,7 @@ class RoutineExerciseEntry extends DataClass
       targetSets: Value(targetSets),
       targetReps: Value(targetReps),
       targetWeight: Value(targetWeight),
+      sectionName: Value(sectionName),
       lastModifiedAt: Value(lastModifiedAt),
       syncStatus: Value(syncStatus),
       isDeleted: Value(isDeleted),
@@ -1561,6 +1642,7 @@ class RoutineExerciseEntry extends DataClass
       targetSets: serializer.fromJson<int>(json['targetSets']),
       targetReps: serializer.fromJson<int>(json['targetReps']),
       targetWeight: serializer.fromJson<double>(json['targetWeight']),
+      sectionName: serializer.fromJson<String>(json['sectionName']),
       lastModifiedAt: serializer.fromJson<DateTime>(json['lastModifiedAt']),
       syncStatus: serializer.fromJson<int>(json['syncStatus']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
@@ -1578,6 +1660,7 @@ class RoutineExerciseEntry extends DataClass
       'targetSets': serializer.toJson<int>(targetSets),
       'targetReps': serializer.toJson<int>(targetReps),
       'targetWeight': serializer.toJson<double>(targetWeight),
+      'sectionName': serializer.toJson<String>(sectionName),
       'lastModifiedAt': serializer.toJson<DateTime>(lastModifiedAt),
       'syncStatus': serializer.toJson<int>(syncStatus),
       'isDeleted': serializer.toJson<bool>(isDeleted),
@@ -1593,6 +1676,7 @@ class RoutineExerciseEntry extends DataClass
     int? targetSets,
     int? targetReps,
     double? targetWeight,
+    String? sectionName,
     DateTime? lastModifiedAt,
     int? syncStatus,
     bool? isDeleted,
@@ -1605,6 +1689,7 @@ class RoutineExerciseEntry extends DataClass
     targetSets: targetSets ?? this.targetSets,
     targetReps: targetReps ?? this.targetReps,
     targetWeight: targetWeight ?? this.targetWeight,
+    sectionName: sectionName ?? this.sectionName,
     lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
     syncStatus: syncStatus ?? this.syncStatus,
     isDeleted: isDeleted ?? this.isDeleted,
@@ -1629,6 +1714,9 @@ class RoutineExerciseEntry extends DataClass
       targetWeight: data.targetWeight.present
           ? data.targetWeight.value
           : this.targetWeight,
+      sectionName: data.sectionName.present
+          ? data.sectionName.value
+          : this.sectionName,
       lastModifiedAt: data.lastModifiedAt.present
           ? data.lastModifiedAt.value
           : this.lastModifiedAt,
@@ -1650,6 +1738,7 @@ class RoutineExerciseEntry extends DataClass
           ..write('targetSets: $targetSets, ')
           ..write('targetReps: $targetReps, ')
           ..write('targetWeight: $targetWeight, ')
+          ..write('sectionName: $sectionName, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -1667,6 +1756,7 @@ class RoutineExerciseEntry extends DataClass
     targetSets,
     targetReps,
     targetWeight,
+    sectionName,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -1683,6 +1773,7 @@ class RoutineExerciseEntry extends DataClass
           other.targetSets == this.targetSets &&
           other.targetReps == this.targetReps &&
           other.targetWeight == this.targetWeight &&
+          other.sectionName == this.sectionName &&
           other.lastModifiedAt == this.lastModifiedAt &&
           other.syncStatus == this.syncStatus &&
           other.isDeleted == this.isDeleted);
@@ -1697,6 +1788,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
   final Value<int> targetSets;
   final Value<int> targetReps;
   final Value<double> targetWeight;
+  final Value<String> sectionName;
   final Value<DateTime> lastModifiedAt;
   final Value<int> syncStatus;
   final Value<bool> isDeleted;
@@ -1709,6 +1801,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     this.targetSets = const Value.absent(),
     this.targetReps = const Value.absent(),
     this.targetWeight = const Value.absent(),
+    this.sectionName = const Value.absent(),
     this.lastModifiedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -1722,6 +1815,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     this.targetSets = const Value.absent(),
     this.targetReps = const Value.absent(),
     this.targetWeight = const Value.absent(),
+    this.sectionName = const Value.absent(),
     required DateTime lastModifiedAt,
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -1738,6 +1832,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     Expression<int>? targetSets,
     Expression<int>? targetReps,
     Expression<double>? targetWeight,
+    Expression<String>? sectionName,
     Expression<DateTime>? lastModifiedAt,
     Expression<int>? syncStatus,
     Expression<bool>? isDeleted,
@@ -1751,6 +1846,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
       if (targetSets != null) 'target_sets': targetSets,
       if (targetReps != null) 'target_reps': targetReps,
       if (targetWeight != null) 'target_weight': targetWeight,
+      if (sectionName != null) 'section_name': sectionName,
       if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (isDeleted != null) 'is_deleted': isDeleted,
@@ -1766,6 +1862,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     Value<int>? targetSets,
     Value<int>? targetReps,
     Value<double>? targetWeight,
+    Value<String>? sectionName,
     Value<DateTime>? lastModifiedAt,
     Value<int>? syncStatus,
     Value<bool>? isDeleted,
@@ -1779,6 +1876,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
       targetSets: targetSets ?? this.targetSets,
       targetReps: targetReps ?? this.targetReps,
       targetWeight: targetWeight ?? this.targetWeight,
+      sectionName: sectionName ?? this.sectionName,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -1812,6 +1910,9 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     if (targetWeight.present) {
       map['target_weight'] = Variable<double>(targetWeight.value);
     }
+    if (sectionName.present) {
+      map['section_name'] = Variable<String>(sectionName.value);
+    }
     if (lastModifiedAt.present) {
       map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
     }
@@ -1835,6 +1936,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
           ..write('targetSets: $targetSets, ')
           ..write('targetReps: $targetReps, ')
           ..write('targetWeight: $targetWeight, ')
+          ..write('sectionName: $sectionName, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -3229,6 +3331,7 @@ typedef $$ExercisesTableCreateCompanionBuilder =
       required String category,
       required String targetMuscle,
       required String equipment,
+      Value<String> description,
       Value<bool> isCustom,
       required DateTime lastModifiedAt,
       Value<int> syncStatus,
@@ -3242,6 +3345,7 @@ typedef $$ExercisesTableUpdateCompanionBuilder =
       Value<String> category,
       Value<String> targetMuscle,
       Value<String> equipment,
+      Value<String> description,
       Value<bool> isCustom,
       Value<DateTime> lastModifiedAt,
       Value<int> syncStatus,
@@ -3330,6 +3434,11 @@ class $$ExercisesTableFilterComposer
 
   ColumnFilters<String> get equipment => $composableBuilder(
     column: $table.equipment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3443,6 +3552,11 @@ class $$ExercisesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isCustom => $composableBuilder(
     column: $table.isCustom,
     builder: (column) => ColumnOrderings(column),
@@ -3492,6 +3606,11 @@ class $$ExercisesTableAnnotationComposer
 
   GeneratedColumn<String> get equipment =>
       $composableBuilder(column: $table.equipment, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get isCustom =>
       $composableBuilder(column: $table.isCustom, builder: (column) => column);
@@ -3597,6 +3716,7 @@ class $$ExercisesTableTableManager
                 Value<String> category = const Value.absent(),
                 Value<String> targetMuscle = const Value.absent(),
                 Value<String> equipment = const Value.absent(),
+                Value<String> description = const Value.absent(),
                 Value<bool> isCustom = const Value.absent(),
                 Value<DateTime> lastModifiedAt = const Value.absent(),
                 Value<int> syncStatus = const Value.absent(),
@@ -3608,6 +3728,7 @@ class $$ExercisesTableTableManager
                 category: category,
                 targetMuscle: targetMuscle,
                 equipment: equipment,
+                description: description,
                 isCustom: isCustom,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
@@ -3621,6 +3742,7 @@ class $$ExercisesTableTableManager
                 required String category,
                 required String targetMuscle,
                 required String equipment,
+                Value<String> description = const Value.absent(),
                 Value<bool> isCustom = const Value.absent(),
                 required DateTime lastModifiedAt,
                 Value<int> syncStatus = const Value.absent(),
@@ -3632,6 +3754,7 @@ class $$ExercisesTableTableManager
                 category: category,
                 targetMuscle: targetMuscle,
                 equipment: equipment,
+                description: description,
                 isCustom: isCustom,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
@@ -4113,6 +4236,7 @@ typedef $$RoutineExercisesTableCreateCompanionBuilder =
       Value<int> targetSets,
       Value<int> targetReps,
       Value<double> targetWeight,
+      Value<String> sectionName,
       required DateTime lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -4127,6 +4251,7 @@ typedef $$RoutineExercisesTableUpdateCompanionBuilder =
       Value<int> targetSets,
       Value<int> targetReps,
       Value<double> targetWeight,
+      Value<String> sectionName,
       Value<DateTime> lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -4220,6 +4345,11 @@ class $$RoutineExercisesTableFilterComposer
 
   ColumnFilters<double> get targetWeight => $composableBuilder(
     column: $table.targetWeight,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sectionName => $composableBuilder(
+    column: $table.sectionName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4324,6 +4454,11 @@ class $$RoutineExercisesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sectionName => $composableBuilder(
+    column: $table.sectionName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
     column: $table.lastModifiedAt,
     builder: (column) => ColumnOrderings(column),
@@ -4418,6 +4553,11 @@ class $$RoutineExercisesTableAnnotationComposer
 
   GeneratedColumn<double> get targetWeight => $composableBuilder(
     column: $table.targetWeight,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sectionName => $composableBuilder(
+    column: $table.sectionName,
     builder: (column) => column,
   );
 
@@ -4519,6 +4659,7 @@ class $$RoutineExercisesTableTableManager
                 Value<int> targetSets = const Value.absent(),
                 Value<int> targetReps = const Value.absent(),
                 Value<double> targetWeight = const Value.absent(),
+                Value<String> sectionName = const Value.absent(),
                 Value<DateTime> lastModifiedAt = const Value.absent(),
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -4531,6 +4672,7 @@ class $$RoutineExercisesTableTableManager
                 targetSets: targetSets,
                 targetReps: targetReps,
                 targetWeight: targetWeight,
+                sectionName: sectionName,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,
@@ -4545,6 +4687,7 @@ class $$RoutineExercisesTableTableManager
                 Value<int> targetSets = const Value.absent(),
                 Value<int> targetReps = const Value.absent(),
                 Value<double> targetWeight = const Value.absent(),
+                Value<String> sectionName = const Value.absent(),
                 required DateTime lastModifiedAt,
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -4557,6 +4700,7 @@ class $$RoutineExercisesTableTableManager
                 targetSets: targetSets,
                 targetReps: targetReps,
                 targetWeight: targetWeight,
+                sectionName: sectionName,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,

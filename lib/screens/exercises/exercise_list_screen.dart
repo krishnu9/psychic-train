@@ -343,12 +343,30 @@ class _ExerciseTile extends ConsumerWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        subtitle: Text(
-          '${exercise.equipment} · ${exercise.targetMuscle}',
-          style: const TextStyle(
-            color: AppColors.textMuted,
-            fontSize: 12,
-          ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${exercise.equipment} · ${exercise.targetMuscle}',
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+              ),
+            ),
+            if (exercise.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  exercise.description,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
         ),
         trailing: exercise.isCustom
             ? Row(

@@ -14,8 +14,9 @@ void main() {
       name: 'Custom Curl', 
       category: 'Biceps', 
       targetMuscle: 'Biceps', 
-      equipment: 'Dumbbell', 
-      isCustom: true, 
+      equipment: 'Dumbbell',
+      description: '',
+      isCustom: true,
       lastModifiedAt: DateTime.now(), 
       syncStatus: 0, 
       isDeleted: false
