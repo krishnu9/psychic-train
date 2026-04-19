@@ -12,6 +12,7 @@ class Formatters {
 
   /// Format a Duration as "HH:MM:SS" or "MM:SS" if under an hour.
   static String duration(Duration d) {
+    if (d.isNegative) d = Duration.zero;
     final hours = d.inHours;
     final minutes = d.inMinutes.remainder(60);
     final seconds = d.inSeconds.remainder(60);

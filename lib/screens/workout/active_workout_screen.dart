@@ -60,7 +60,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     final workout = await ref.read(workoutRepositoryProvider).getById(widget.workoutId);
     if (workout != null && mounted) {
       setState(() {
-        _elapsedOffset = DateTime.now().difference(workout.startTime);
+        final raw = DateTime.now().difference(workout.startTime);
+        _elapsedOffset = raw.isNegative ? Duration.zero : raw;
       });
     }
   }
