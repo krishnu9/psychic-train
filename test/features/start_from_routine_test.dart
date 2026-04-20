@@ -51,7 +51,7 @@ void main() {
   });
 
   group('Start Workout from Routines — rendering', () {
-    testWidgets('renders a Start Workout button for each routine', (tester) async {
+    testWidgets('renders a Start button for each expanded routine', (tester) async {
       final routines = [_makeRoutine(1, 'Push Day'), _makeRoutine(2, 'Pull Day')];
 
       await tester.pumpApp(
@@ -67,9 +67,13 @@ void main() {
       );
 
       await tester.pump();
+      await tester.tap(find.text('Push Day'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pull Day'));
+      await tester.pumpAndSettle();
 
-      // Expect at least one "Start Workout" button to be visible
-      expect(find.text('Start Workout'), findsWidgets);
+      // Expect at least one "Start" button to be visible
+      expect(find.widgetWithText(ElevatedButton, 'Start'), findsNWidgets(2));
     });
 
     testWidgets('shows empty state when no routines exist', (tester) async {
@@ -86,13 +90,13 @@ void main() {
       );
 
       await tester.pump();
-      // No "Start Workout" button when there are no routines
-      expect(find.text('Start Workout'), findsNothing);
+      // No "Start" button when there are no routines
+      expect(find.widgetWithText(ElevatedButton, 'Start'), findsNothing);
     });
   });
 
   group('Start Workout from Routines — interaction', () {
-    testWidgets('tapping Start Workout calls repo.start with correct routineId',
+    testWidgets('tapping Start calls repo.start with correct routineId',
         (tester) async {
       final routines = [_makeRoutine(7, 'Leg Day')];
 
@@ -109,14 +113,16 @@ void main() {
       );
 
       await tester.pump();
-      await tester.tap(find.text('Start Workout').first);
+      await tester.tap(find.text('Leg Day'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Start'));
       await tester.pump();
 
       verify(() => workoutRepo.start(routineId: 7)).called(1);
     });
 
     testWidgets(
-        'tapping Start Workout when a workout is already active shows warning dialog',
+        'tapping Start when a workout is already active shows warning dialog',
         (tester) async {
       final activeWorkout = Workout(
         id: 99,
@@ -145,8 +151,10 @@ void main() {
       );
 
       await tester.pump();
-      await tester.tap(find.text('Start Workout').first);
-      await tester.pump();
+      await tester.tap(find.text('Push Day'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Start'));
+      await tester.pumpAndSettle();
 
       // A dialog or snackbar warning should appear instead of starting a new workout
       expect(find.byType(AlertDialog), findsOneWidget);
