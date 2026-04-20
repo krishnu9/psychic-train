@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
 import '../../database/app_database.dart';
 import '../../utils/formatters.dart';
+import 'workout_detail_screen.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -204,127 +205,12 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
 
           // Expanded details
           if (_isExpanded)
-            _WorkoutDetails(
+            WorkoutDetails(
               workoutId: workout.id,
               useLbs: widget.useLbs,
             ),
         ],
       ),
-    );
-  }
-}
-
-class _WorkoutDetails extends ConsumerWidget {
-  final int workoutId;
-  final bool useLbs;
-
-  const _WorkoutDetails({
-    required this.workoutId,
-    required this.useLbs,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final setsAsync = ref.watch(workoutSetsProvider(workoutId));
-    final exercisesAsync = ref.watch(exercisesProvider);
-
-    return setsAsync.when(
-      data: (sets) {
-        if (sets.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('No sets logged',
-                style: TextStyle(color: AppColors.textMuted)),
-          );
-        }
-
-        // Group sets by exercise
-        final grouped = <int, List<LoggedSet>>{};
-        for (final s in sets) {
-          grouped.putIfAbsent(s.exerciseId, () => []).add(s);
-        }
-
-        final exerciseNames = exercisesAsync.when(
-          data: (list) => {for (final e in list) e.id: e.name},
-          loading: () => <int, String>{},
-          error: (_, __) => <int, String>{},
-        );
-
-        double totalVolume = 0;
-        for (final s in sets) {
-          totalVolume += s.weight * s.reps;
-        }
-
-        return Column(
-          children: [
-            const Divider(height: 1),
-            // Volume summary
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Text(
-                    'Total Volume: ${Formatters.volume(totalVolume, useLbs: useLbs)}',
-                    style: const TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${sets.length} sets',
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Exercise breakdown
-            ...grouped.entries.map((entry) {
-              final exName =
-                  exerciseNames[entry.key] ?? 'Exercise #${entry.key}';
-              final exSets = entry.value;
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      exName,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    ...exSets.map((s) => Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Text(
-                            'Set ${s.setNumber}: ${Formatters.weight(s.weight, useLbs: useLbs)} × ${s.reps} reps',
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        )),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 8),
-          ],
-        );
-      },
-      loading: () => const Padding(
-        padding: EdgeInsets.all(16),
-        child: Center(child: CircularProgressIndicator()),
-      ),
-      error: (e, _) => Text('Error: $e'),
     );
   }
 }

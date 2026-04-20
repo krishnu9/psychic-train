@@ -21,6 +21,7 @@ void main() {
       overrides: [
         routinesProvider.overrideWith((ref) => Stream.value([])),
         exercisesProvider.overrideWith((ref) => Stream.value([])),
+        workoutsProvider.overrideWith((ref) => Stream.value([])),
         workoutsThisWeekProvider.overrideWith((ref) => Stream.value(0)),
         totalWorkoutsProvider.overrideWith((ref) => Stream.value(0)),
         isAuthenticatedProvider.overrideWith((ref) => true),
@@ -32,7 +33,7 @@ void main() {
 
     // Initial is Home
     await tester.pump();
-    expect(find.text('Ready to train?'), findsOneWidget);
+    expect(find.text('TRACKER'), findsOneWidget);
 
     // Tap Exercises tab (icon-based nav bar, second icon is fitness_center)
     await tester.tap(find.byIcon(Icons.fitness_center_rounded));

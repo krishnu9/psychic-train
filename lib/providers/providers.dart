@@ -6,6 +6,7 @@ import '../database/connection/connection.dart';
 import '../repositories/repositories.dart';
 import '../services/sync_service.dart';
 import '../services/supabase_service.dart';
+import '../utils/one_rm_calculator.dart';
 
 
 // ─── Database ────────────────────────────────────────────────────────────────
@@ -77,6 +78,110 @@ final workoutsThisWeekProvider = StreamProvider<int>((ref) {
 
 final totalWorkoutsProvider = StreamProvider<int>((ref) {
   return ref.watch(workoutRepositoryProvider).watchWorkoutCount();
+});
+
+/// Workouts completed since the 1st of the current month.
+final workoutsThisMonthCountProvider = Provider<int>((ref) {
+  final workoutsAsync = ref.watch(workoutsProvider);
+  final list = workoutsAsync.valueOrNull;
+  if (list == null) return 0;
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month, 1);
+  return list
+      .where((w) => w.endTime != null && !w.startTime.isBefore(start))
+      .length;
+});
+
+/// The most recent completed workout, or null.
+final lastCompletedWorkoutProvider = Provider<Workout?>((ref) {
+  final workoutsAsync = ref.watch(workoutsProvider);
+  final list = workoutsAsync.valueOrNull;
+  if (list == null || list.isEmpty) return null;
+  final finished = list.where((w) => w.endTime != null).toList()
+    ..sort((a, b) => b.startTime.compareTo(a.startTime));
+  return finished.isEmpty ? null : finished.first;
+});
+
+/// Map of local-midnight date → completed workout count, for the last 105 days.
+final workoutHeatmapProvider = Provider<Map<DateTime, int>>((ref) {
+  final workoutsAsync = ref.watch(workoutsProvider);
+  final list = workoutsAsync.valueOrNull ?? const <Workout>[];
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final start = today.subtract(const Duration(days: 104));
+  final map = <DateTime, int>{};
+  for (final w in list) {
+    if (w.endTime == null) continue;
+    final d = DateTime(w.startTime.year, w.startTime.month, w.startTime.day);
+    if (d.isBefore(start) || d.isAfter(today)) continue;
+    map[d] = (map[d] ?? 0) + 1;
+  }
+  return map;
+});
+
+/// Stats for the most recent completed workout.
+class LastSessionStats {
+  final Workout workout;
+  final Duration duration;
+  final double volume;
+  final int newPrs;
+  const LastSessionStats({
+    required this.workout,
+    required this.duration,
+    required this.volume,
+    required this.newPrs,
+  });
+}
+
+/// Computes duration / volume / new-PR count for the latest completed workout.
+/// Returns null if there is no completed workout yet.
+final lastSessionStatsProvider =
+    FutureProvider<LastSessionStats?>((ref) async {
+  final last = ref.watch(lastCompletedWorkoutProvider);
+  if (last == null) return null;
+  final repo = ref.watch(workoutRepositoryProvider);
+  final allSets = await repo.getAllSets();
+
+  // Current session's sets
+  final currentSets = allSets.where((s) => s.workoutId == last.id).toList();
+
+  final duration =
+      last.endTime != null ? last.endTime!.difference(last.startTime) : Duration.zero;
+
+  double volume = 0;
+  for (final s in currentSets) {
+    volume += s.weight * s.reps;
+  }
+
+  // Best estimated 1RM per exercise in this session
+  final currentBest = <int, double>{};
+  for (final s in currentSets) {
+    final est = OneRmCalculator.estimate(s.weight, s.reps);
+    final prev = currentBest[s.exerciseId] ?? 0;
+    if (est > prev) currentBest[s.exerciseId] = est;
+  }
+
+  // Best estimated 1RM per exercise from all prior sessions
+  final priorBest = <int, double>{};
+  for (final s in allSets) {
+    if (s.workoutId == last.id) continue;
+    final est = OneRmCalculator.estimate(s.weight, s.reps);
+    final prev = priorBest[s.exerciseId] ?? 0;
+    if (est > prev) priorBest[s.exerciseId] = est;
+  }
+
+  int newPrs = 0;
+  for (final entry in currentBest.entries) {
+    final prior = priorBest[entry.key] ?? 0;
+    if (entry.value > prior) newPrs++;
+  }
+
+  return LastSessionStats(
+    workout: last,
+    duration: duration,
+    volume: volume,
+    newPrs: newPrs,
+  );
 });
 
 // ─── UI state providers ──────────────────────────────────────────────────────

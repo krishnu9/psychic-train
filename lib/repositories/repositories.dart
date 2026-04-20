@@ -198,6 +198,7 @@ class WorkoutRepository {
   // Logged sets
   Future<List<LoggedSet>> getSets(int workoutId) => _db.getLoggedSets(workoutId);
   Stream<List<LoggedSet>> watchSets(int workoutId) => _db.watchLoggedSets(workoutId);
+  Future<List<LoggedSet>> getAllSets() => _db.getAllLoggedSets();
 
   Future<int> logSet({
     required int workoutId,

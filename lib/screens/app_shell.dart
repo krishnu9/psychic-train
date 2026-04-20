@@ -24,13 +24,18 @@ class _AppShellState extends ConsumerState<AppShell> {
   int _currentIndex = 0;
   bool _hasPromptedResume = false;
 
-  final _screens = const [
-    HomeScreen(),
-    ExerciseListScreen(),
-    RoutineListScreen(),
-    HistoryScreen(),
-    SettingsScreen(),
+  late final List<Widget> _screens = [
+    HomeScreen(onNavigate: _navigateToTab),
+    const ExerciseListScreen(),
+    const RoutineListScreen(),
+    const HistoryScreen(),
+    const SettingsScreen(),
   ];
+
+  void _navigateToTab(int index) {
+    if (!mounted) return;
+    setState(() => _currentIndex = index);
+  }
 
   static const _navItems = [
     _NavItem(icon: Icons.home_rounded, label: 'Home'),

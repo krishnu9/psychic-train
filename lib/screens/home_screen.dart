@@ -1,367 +1,410 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../providers/providers.dart';
 import '../database/app_database.dart';
+import '../utils/formatters.dart';
+import '../widgets/consistency_heatmap.dart';
 import 'workout/active_workout_screen.dart';
+import 'history/workout_detail_screen.dart';
 
-class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+/// Homepage — greeting, Start Workout, consistency heatmap, last session, routines.
+class HomeScreen extends ConsumerWidget {
+  final void Function(int tabIndex) onNavigate;
+
+  const HomeScreen({super.key, required this.onNavigate});
+
+  static const _routinesTabIndex = 2;
 
   @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final routinesAsync = ref.watch(routinesProvider);
-    final weekCountAsync = ref.watch(workoutsThisWeekProvider);
-    final totalAsync = ref.watch(totalWorkoutsProvider);
+    final sessionsThisMonth = ref.watch(workoutsThisMonthCountProvider);
+    final email = ref.watch(userEmailProvider);
+    final firstName = _firstNameFromEmail(email);
 
     return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          // ─── Header ─────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Tracker',
-                        style:
-                            Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 30,
-                                ),
-                      ),
-                      Text(
-                        'Ready to train?',
-                        style:
-                            Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius:
-                          BorderRadius.circular(AppColors.bentoRadius),
-                    ),
-                    child: const Icon(Icons.bolt_rounded,
-                        color: AppColors.primary, size: 24),
-                  ),
-                ],
-              ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _TopBar(),
+            const SizedBox(height: 20),
+            _Greeting(
+              firstName: firstName,
+              sessionsThisMonth: sessionsThisMonth,
+            ),
+            const SizedBox(height: 20),
+            _StartWorkoutButton(
+              onTap: () => onNavigate(_routinesTabIndex),
+            ),
+            const SizedBox(height: 20),
+            _ConsistencyMapCard(),
+            const SizedBox(height: 20),
+            _LastSessionCard(),
+            const SizedBox(height: 28),
+            _SavedRoutinesSection(
+              routinesAsync: routinesAsync,
+              onTapRoutine: (r) => _showStartRoutineSheet(context, ref, r),
+              onExplore: () => onNavigate(_routinesTabIndex),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _firstNameFromEmail(String email) {
+    if (!email.contains('@')) return 'there';
+    final local = email.split('@').first;
+    if (local.isEmpty) return 'there';
+    final base = local.split(RegExp(r'[._\-+]')).first;
+    if (base.isEmpty) return 'there';
+    return base[0].toUpperCase() + base.substring(1).toLowerCase();
+  }
+}
+
+// ─── Top bar ─────────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.surfaceBright,
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.4),
+              width: 1.5,
             ),
           ),
-
-          // ─── Bento Grid ──────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: Column(
-                children: [
-                  // ── Row 1: Stats + Start Workout ──────────
-                  SizedBox(
-                    height: 260,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Stat cards column
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            children: [
-                              _BentoStatCard(
-                                label: 'This Week',
-                                value: weekCountAsync.when(
-                                  data: (v) => '$v',
-                                  loading: () => '–',
-                                  error: (_, e2) => '-',
-                                ),
-                                icon: Icons.calendar_today_rounded,
-                                color: AppColors.primary,
-                              ),
-                              const SizedBox(height: 10),
-                              _BentoStatCard(
-                                label: 'Total',
-                                value: totalAsync.when(
-                                  data: (v) => '$v',
-                                  loading: () => '–',
-                                  error: (_, e2) => '-',
-                                ),
-                                icon: Icons.emoji_events_rounded,
-                                color: AppColors.secondary,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        // Start Empty Workout hero card
-                        Expanded(
-                          flex: 7,
-                          child: _StartEmptyWorkoutBento(ref: ref),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // ── Row 2: Motivational card ───────────────
-                  _MotivationalBentoCard(),
-
-                  const SizedBox(height: 20),
-
-                  // ── Quick Start heading ────────────────────
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Quick Start',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-              ),
-            ),
+          child: const Icon(Icons.person_rounded,
+              size: 20, color: AppColors.textSecondary),
+        ),
+        const SizedBox(width: 12),
+        const Text(
+          'TRACKER',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2,
+            fontSize: 14,
           ),
+        ),
+        const Spacer(),
+        Icon(Icons.notifications_none_rounded,
+            size: 22, color: AppColors.textSecondary),
+      ],
+    );
+  }
+}
 
-          // ─── Routine Bento Grid ───────────────────────────
-          routinesAsync.when(
-            data: (routines) {
-              if (routines.isEmpty) {
-                return SliverToBoxAdapter(
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                    child: Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius:
-                            BorderRadius.circular(AppColors.bentoRadius),
-                        border: Border.all(
-                            color: AppColors.divider.withValues(alpha: 0.5)),
-                      ),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.add_circle_outline_rounded,
-                                size: 48, color: AppColors.textMuted),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No routines yet.\nGo to the Routines tab to create one!',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.textMuted),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }
-              return SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                  child: _BentoRoutineGrid(
-                    routines: routines,
-                    onTap: (r) => _showStartRoutineConfirmation(r),
+// ─── Greeting ────────────────────────────────────────────────────────────────
+
+class _Greeting extends StatelessWidget {
+  final String firstName;
+  final int sessionsThisMonth;
+
+  const _Greeting({
+    required this.firstName,
+    required this.sessionsThisMonth,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hour = DateTime.now().hour;
+    final tod = hour < 12
+        ? 'Morning'
+        : hour < 17
+            ? 'Afternoon'
+            : 'Evening';
+
+    final subtitle = sessionsThisMonth == 0
+        ? "Let's get your first session in this month."
+        : "Your momentum is building. You've completed "
+            "$sessionsThisMonth session${sessionsThisMonth == 1 ? '' : 's'} this month.";
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: TextSpan(
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              height: 1.1,
+            ),
+            children: [
+              TextSpan(text: '$tod, '),
+              TextSpan(
+                text: '$firstName.',
+                style: const TextStyle(color: AppColors.primary),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Start Workout button ────────────────────────────────────────────────────
+
+class _StartWorkoutButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _StartWorkoutButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.primaryDark],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.35),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.play_circle_fill_rounded,
+                  color: AppColors.background, size: 22),
+              SizedBox(width: 10),
+              Text(
+                'Start Workout',
+                style: TextStyle(
+                  color: AppColors.background,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Consistency Map card ────────────────────────────────────────────────────
+
+class _ConsistencyMapCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(workoutHeatmapProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppColors.bentoRadius),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Expanded(
+                child: Text(
+                  'Consistency Map',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              );
-            },
-            loading: () => const SliverToBoxAdapter(
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => SliverToBoxAdapter(
-              child: Center(child: Text('Error: $e')),
+              ),
+              const ConsistencyHeatmapLegend(),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ConsistencyHeatmap(data: data),
+          const SizedBox(height: 14),
+          const Text(
+            'Consistency is the bridge between goals and accomplishment.',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontStyle: FontStyle.italic,
+              fontSize: 12,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Future<void> _startWorkout(int routineId) async {
-    final repo = ref.read(workoutRepositoryProvider);
-    final workoutId = await repo.start(routineId: routineId);
-    if (mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ActiveWorkoutScreen(
-            workoutId: workoutId,
-            routineId: routineId,
+// ─── Last Session card ───────────────────────────────────────────────────────
+
+class _LastSessionCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(lastSessionStatsProvider);
+    final routinesAsync = ref.watch(routinesProvider);
+    final useLbs = ref.watch(useLbsProvider);
+
+    return statsAsync.when(
+      loading: () => const _LastSessionShell(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: CircularProgressIndicator(),
           ),
         ),
-      );
-    }
-  }
-
-  Future<void> _showStartRoutineConfirmation(Routine routine) async {
-    final color = Color(int.parse('0x${routine.colorHex}'));
-    final exercises =
-        await ref.read(routineRepositoryProvider).getExercises(routine.id);
-    final allExercises = await ref.read(exerciseRepositoryProvider).getAll();
-
-    if (!mounted) return;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 24,
-            right: 24,
-            top: 24,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 32,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: AppColors.divider,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Row(
+      error: (e, _) => _LastSessionShell(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Text('Couldn\'t load last session: $e',
+              style: const TextStyle(color: AppColors.textMuted)),
+        ),
+      ),
+      data: (stats) {
+        if (stats == null) {
+          return _LastSessionShell(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(14),
+                  const Text(
+                    'LATEST SESSION',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
                     ),
-                    child: Icon(Icons.fitness_center_rounded,
-                        color: color, size: 24),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          routine.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 20,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        if (routine.description.isNotEmpty)
-                          MarkdownBody(
-                            data: routine.description,
-                            shrinkWrap: true,
-                            styleSheet: MarkdownStyleSheet(
-                              p: const TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                      ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'No sessions yet',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Start a workout to see your stats here.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              if (exercises.isNotEmpty) ...[
-                Text(
-                  '${exercises.length} Exercise${exercises.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...exercises.take(5).map((re) {
-                  final ex =
-                      allExercises.where((e) => e.id == re.exerciseId).firstOrNull;
-                  if (ex == null) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.circle, size: 5, color: AppColors.textMuted),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${ex.name}  ·  ${re.targetSets}×${re.targetReps}',
-                          style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-                if (exercises.length > 5)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, left: 13),
+            ),
+          );
+        }
+
+        final routineName = stats.workout.routineId != null
+            ? routinesAsync.valueOrNull
+                ?.where((r) => r.id == stats.workout.routineId)
+                .firstOrNull
+                ?.name
+            : null;
+
+        return _LastSessionShell(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
                     child: Text(
-                      '+ ${exercises.length - 5} more',
-                      style:
-                          const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      'LATEST SESSION',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.5,
+                      ),
                     ),
                   ),
-                const SizedBox(height: 20),
-              ],
-              const Divider(color: AppColors.divider),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _startWorkout(routine.id);
-                  },
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('Start Workout',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.background,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
+                  Icon(Icons.bolt_rounded,
+                      color: AppColors.primary, size: 20),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                routineName ?? 'Free Workout',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 18),
+              _StatRow(
+                label: 'Duration',
+                value: Formatters.duration(stats.duration),
+              ),
+              const SizedBox(height: 8),
+              _StatRow(
+                label: 'Volume',
+                value: Formatters.volume(stats.volume, useLbs: useLbs),
+              ),
+              const SizedBox(height: 8),
+              _StatRow(
+                label: 'New PRs',
+                value: '★ ${stats.newPrs}',
+                accent: true,
+              ),
+              const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel',
-                      style: TextStyle(color: AppColors.textMuted)),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            WorkoutDetailScreen(workoutId: stats.workout.id),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.08),
+                    foregroundColor: AppColors.textPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'View Analysis',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
             ],
@@ -372,179 +415,238 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bento: Stat Card
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _BentoStatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _BentoStatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
+class _LastSessionShell extends StatelessWidget {
+  final Widget child;
+  const _LastSessionShell({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppColors.bentoRadius),
-          border: Border.all(color: color.withValues(alpha: 0.18), width: 1),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              color.withValues(alpha: 0.08),
-              AppColors.surface,
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppColors.bentoRadius),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1E3A5F), Color(0xFF15283F)],
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 16),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              value,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w800,
-                fontSize: 28,
-                height: 1,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(label,
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-          ],
-        ),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.25)),
       ),
+      child: child,
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bento: Start Empty Workout Hero Card
-// ─────────────────────────────────────────────────────────────────────────────
+class _StatRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool accent;
 
-class _StartEmptyWorkoutBento extends StatelessWidget {
-  final WidgetRef ref;
-  const _StartEmptyWorkoutBento({required this.ref});
+  const _StatRow({
+    required this.label,
+    required this.value,
+    this.accent = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: accent ? AppColors.primary : AppColors.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Saved Routines section ──────────────────────────────────────────────────
+
+class _SavedRoutinesSection extends StatelessWidget {
+  final AsyncValue<List<Routine>> routinesAsync;
+  final void Function(Routine) onTapRoutine;
+  final VoidCallback onExplore;
+
+  const _SavedRoutinesSection({
+    required this.routinesAsync,
+    required this.onTapRoutine,
+    required this.onExplore,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Saved Routines',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Jump back into your custom programs',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: onExplore,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+              child: const Text(
+                'Explore\nLibrary',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        routinesAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) => Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('Error: $e',
+                style: const TextStyle(color: AppColors.textMuted)),
+          ),
+          data: (routines) {
+            if (routines.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppColors.bentoRadius),
+                  border: Border.all(color: AppColors.divider),
+                ),
+                child: const Center(
+                  child: Text(
+                    'No routines yet.\nCreate one from the Routines tab.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textMuted),
+                  ),
+                ),
+              );
+            }
+            return Column(
+              children: [
+                for (final r in routines) ...[
+                  _RoutineCard(routine: r, onTap: () => onTapRoutine(r)),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _RoutineCard extends ConsumerWidget {
+  final Routine routine;
+  final VoidCallback onTap;
+
+  const _RoutineCard({required this.routine, required this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final color = Color(int.parse('0x${routine.colorHex}'));
+    final exercisesAsync = ref.watch(routineExercisesProvider(routine.id));
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppColors.bentoRadius),
-        onTap: () async {
-          final repo = ref.read(workoutRepositoryProvider);
-          final workoutId = await repo.start();
-          if (context.mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ActiveWorkoutScreen(
-                  workoutId: workoutId,
-                  routineId: null,
-                ),
-              ),
-            );
-          }
-        },
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
         child: Container(
-          width: double.infinity,
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.bentoRadius),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.primary.withValues(alpha: 0.9),
-                AppColors.primaryDark,
-              ],
-            ),
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.divider),
           ),
-          child: Stack(
+          child: Row(
             children: [
-              // Decorative circles
-              Positioned(
-                top: -20,
-                right: -20,
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.08),
-                  ),
+              Container(
+                width: 4,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              Positioned(
-                bottom: -30,
-                left: -10,
-                child: Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.05),
-                  ),
-                ),
-              ),
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(20),
+              const SizedBox(width: 14),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
+                    Text(
+                      routine.name,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                       ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          color: Colors.white, size: 22),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Start\nEmpty\nWorkout',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Freestyle session',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                      ),
+                    const SizedBox(height: 4),
+                    exercisesAsync.when(
+                      loading: () => const Text('…',
+                          style: TextStyle(
+                              color: AppColors.textMuted, fontSize: 12)),
+                      error: (_, _) => const SizedBox.shrink(),
+                      data: (list) {
+                        final count = list.length;
+                        return Text(
+                          '$count exercise${count == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
+              Icon(Icons.play_arrow_rounded, color: color, size: 24),
             ],
           ),
         ),
@@ -553,283 +655,176 @@ class _StartEmptyWorkoutBento extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bento: Motivational Card
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Start-routine bottom sheet ──────────────────────────────────────────────
 
-class _MotivationalBentoCard extends StatelessWidget {
-  static const _quotes = [
-    'Push beyond\nyour limits.',
-    'Every rep\ncounts.',
-    'Stronger than\nyesterday.',
-    'No excuses.\nJust results.',
-    'Progress, not\nperfection.',
-  ];
+Future<void> _showStartRoutineSheet(
+    BuildContext context, WidgetRef ref, Routine routine) async {
+  final color = Color(int.parse('0x${routine.colorHex}'));
+  final exercises =
+      await ref.read(routineRepositoryProvider).getExercises(routine.id);
+  final allExercises = await ref.read(exerciseRepositoryProvider).getAll();
 
-  @override
-  Widget build(BuildContext context) {
-    final idx = DateTime.now().day % _quotes.length;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppColors.bentoRadius),
-        color: AppColors.surfaceLight,
-        border:
-            Border.all(color: AppColors.primary.withValues(alpha: 0.12), width: 1),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Daily Motivation',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                  ),
+  if (!context.mounted) return;
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (ctx) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 32,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  _quotes[idx],
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 20,
-                    height: 1.25,
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(Icons.fitness_center_rounded,
+                      color: color, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        routine.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      if (routine.description.isNotEmpty)
+                        MarkdownBody(
+                          data: routine.description,
+                          shrinkWrap: true,
+                          styleSheet: MarkdownStyleSheet(
+                            p: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 16),
-          Icon(
-            Icons.format_quote_rounded,
-            color: AppColors.primary.withValues(alpha: 0.25),
-            size: 56,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Bento: Routine Grid (asymmetric bento layout)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _BentoRoutineGrid extends StatelessWidget {
-  final List<Routine> routines;
-  final void Function(Routine) onTap;
-
-  const _BentoRoutineGrid({required this.routines, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    // Build rows: first row has a wide featured card + a normal card,
-    // then subsequent rows have 2 normal cards.
-    final items = <Widget>[];
-
-    if (routines.isEmpty) return const SizedBox.shrink();
-
-    int i = 0;
-
-    // First row: featured (flex 3) + regular (flex 2)
-    if (routines.length == 1) {
-      items.add(_RoutineBentoCard(
-        routine: routines[0],
-        color: Color(int.parse('0x${routines[0].colorHex}')),
-        onTap: () => onTap(routines[0]),
-        featured: true,
-        fullWidth: true,
-      ));
-    } else {
-      items.add(
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 3,
-                child: _RoutineBentoCard(
-                  routine: routines[0],
-                  color: Color(int.parse('0x${routines[0].colorHex}')),
-                  onTap: () => onTap(routines[0]),
-                  featured: true,
-                  fullWidth: false,
+            const SizedBox(height: 20),
+            if (exercises.isNotEmpty) ...[
+              Text(
+                '${exercises.length} Exercise${exercises.length == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _RoutineBentoCard(
-                  routine: routines[1],
-                  color: Color(int.parse('0x${routines[1].colorHex}')),
-                  onTap: () => onTap(routines[1]),
-                  featured: false,
-                  fullWidth: false,
+              const SizedBox(height: 8),
+              ...exercises.take(5).map((re) {
+                final ex = allExercises
+                    .where((e) => e.id == re.exerciseId)
+                    .firstOrNull;
+                if (ex == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.circle,
+                          size: 5, color: AppColors.textMuted),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${ex.name}  ·  ${re.targetSets}×${re.targetReps}',
+                        style: const TextStyle(
+                            color: AppColors.textSecondary, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              if (exercises.length > 5)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, left: 13),
+                  child: Text(
+                    '+ ${exercises.length - 5} more',
+                    style: const TextStyle(
+                        color: AppColors.textMuted, fontSize: 13),
+                  ),
                 ),
-              ),
+              const SizedBox(height: 20),
             ],
-          ),
+            const Divider(color: AppColors.divider),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final repo = ref.read(workoutRepositoryProvider);
+                  final workoutId = await repo.start(routineId: routine.id);
+                  if (context.mounted) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ActiveWorkoutScreen(
+                          workoutId: workoutId,
+                          routineId: routine.id,
+                        ),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Start Workout',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.background,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel',
+                    style: TextStyle(color: AppColors.textMuted)),
+              ),
+            ),
+          ],
         ),
       );
-      i = 2;
-    }
-
-    // Remaining rows: pairs of 2
-    while (i < routines.length) {
-      items.add(const SizedBox(height: 10));
-      if (i + 1 >= routines.length) {
-        // Last single card – full width
-        final routine = routines[i];
-        items.add(_RoutineBentoCard(
-          routine: routine,
-          color: Color(int.parse('0x${routine.colorHex}')),
-          onTap: () => onTap(routine),
-          featured: false,
-          fullWidth: true,
-        ));
-        i++;
-      } else {
-        final r1 = routines[i];
-        final r2 = routines[i + 1];
-        items.add(
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _RoutineBentoCard(
-                    routine: r1,
-                    color: Color(int.parse('0x${r1.colorHex}')),
-                    onTap: () => onTap(r1),
-                    featured: false,
-                    fullWidth: false,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _RoutineBentoCard(
-                    routine: r2,
-                    color: Color(int.parse('0x${r2.colorHex}')),
-                    onTap: () => onTap(r2),
-                    featured: false,
-                    fullWidth: false,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-        i += 2;
-      }
-    }
-
-    return Column(children: items);
-  }
-}
-
-class _RoutineBentoCard extends StatelessWidget {
-  final dynamic routine;
-  final Color color;
-  final VoidCallback onTap;
-  final bool featured;
-  final bool fullWidth;
-
-  const _RoutineBentoCard({
-    required this.routine,
-    required this.color,
-    required this.onTap,
-    required this.featured,
-    required this.fullWidth,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final double minHeight = featured ? 150 : 120;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppColors.bentoRadius),
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          constraints: BoxConstraints(minHeight: minHeight),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.bentoRadius),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                color.withValues(alpha: 0.28),
-                color.withValues(alpha: 0.07),
-              ],
-            ),
-            border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
-          ),
-          child: Stack(
-            children: [
-              // Subtle background icon
-              if (featured)
-                Positioned(
-                  right: -8,
-                  bottom: -8,
-                  child: Icon(
-                    Icons.fitness_center_rounded,
-                    size: 72,
-                    color: color.withValues(alpha: 0.08),
-                  ),
-                ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Icon chip
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.fitness_center_rounded,
-                        color: color, size: featured ? 20 : 16),
-                  ),
-                  const SizedBox(height: 12),
-                  // Name
-                  Text(
-                    routine.name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: featured ? 16 : 14,
-                      color: AppColors.textPrimary,
-                      height: 1.2,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (routine.description.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        routine.description,
-                        style: TextStyle(
-                            color: AppColors.textMuted, fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+    },
+  );
 }

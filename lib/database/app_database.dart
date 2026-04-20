@@ -357,6 +357,9 @@ class AppDatabase extends _$AppDatabase {
         ]))
       .get();
 
+  Future<List<LoggedSet>> getAllLoggedSets() =>
+      (select(loggedSets)..where((s) => s.isDeleted.equals(false))).get();
+
   Stream<List<LoggedSet>> watchLoggedSets(int workoutId) =>
       (select(loggedSets)
             ..where((s) =>
