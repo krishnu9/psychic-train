@@ -1,13 +1,16 @@
+import 'weight_conversions.dart';
+
 /// Formatting helpers for weights, durations, and dates.
 class Formatters {
-  /// Format weight value with unit suffix. E.g. "100 kg" or "225 lbs".
-  static String weight(double value, {bool useLbs = false}) {
+  /// Format a weight value (stored in kg) with unit suffix.
+  /// When `useLbs` is true, the value is converted from kg to lbs.
+  static String weight(double kgValue, {bool useLbs = false}) {
+    final display = useLbs ? kgToLbs(kgValue) : kgValue;
     final unit = useLbs ? 'lbs' : 'kg';
-    // Show decimal only if fractional part is non-zero
-    if (value == value.roundToDouble()) {
-      return '${value.toInt()} $unit';
+    if (display == display.roundToDouble()) {
+      return '${display.toInt()} $unit';
     }
-    return '${value.toStringAsFixed(1)} $unit';
+    return '${display.toStringAsFixed(1)} $unit';
   }
 
   /// Format a Duration as "HH:MM:SS" or "MM:SS" if under an hour.
@@ -26,18 +29,19 @@ class Formatters {
         '${seconds.toString().padLeft(2, '0')}';
   }
 
-  /// Format total volume (weight × reps summed). E.g. "12,450 kg".
-  static String volume(double totalVolume, {bool useLbs = false}) {
+  /// Format total volume (weight × reps summed, in kg·reps).
+  /// When `useLbs` is true, the volume is converted to lbs·reps.
+  static String volume(double totalVolumeKg, {bool useLbs = false}) {
+    final display = useLbs ? kgToLbs(totalVolumeKg) : totalVolumeKg;
     final unit = useLbs ? 'lbs' : 'kg';
-    if (totalVolume >= 1000) {
-      // Add comma separator
-      final formatted = totalVolume.toInt().toString().replaceAllMapped(
+    if (display >= 1000) {
+      final formatted = display.toInt().toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
         (m) => '${m[1]},',
       );
       return '$formatted $unit';
     }
-    return '${totalVolume.toInt()} $unit';
+    return '${display.toInt()} $unit';
   }
 
   /// Format rest timer countdown. E.g. "1:30" for 90 seconds.

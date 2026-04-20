@@ -4,6 +4,7 @@ import 'package:gymapp/database/app_database.dart';
 import 'package:gymapp/providers/providers.dart';
 import 'package:gymapp/repositories/repositories.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MockExerciseRepository extends Mock implements ExerciseRepository {}
 class MockRoutineRepository extends Mock implements RoutineRepository {}
@@ -13,16 +14,20 @@ void main() {
   late MockExerciseRepository mockExerciseRepo;
   late MockRoutineRepository mockRoutineRepo;
   late MockWorkoutRepository mockWorkoutRepo;
+  late SharedPreferences prefs;
 
-  setUp(() {
+  setUp(() async {
     mockExerciseRepo = MockExerciseRepository();
     mockRoutineRepo = MockRoutineRepository();
     mockWorkoutRepo = MockWorkoutRepository();
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
   });
 
   ProviderContainer makeContainer() {
     final container = ProviderContainer(
       overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
         exerciseRepositoryProvider.overrideWithValue(mockExerciseRepo),
         routineRepositoryProvider.overrideWithValue(mockRoutineRepo),
         workoutRepositoryProvider.overrideWithValue(mockWorkoutRepo),
@@ -71,10 +76,10 @@ void main() {
       expect(container.read(restTimerDurationProvider), 60);
     });
 
-    test('useLbsProvider defaults to false and can be updated', () {
+    test('useLbsProvider defaults to false and can be updated', () async {
       final container = makeContainer();
       expect(container.read(useLbsProvider), isFalse);
-      container.read(useLbsProvider.notifier).state = true;
+      await container.read(useLbsProvider.notifier).set(true);
       expect(container.read(useLbsProvider), isTrue);
     });
   });

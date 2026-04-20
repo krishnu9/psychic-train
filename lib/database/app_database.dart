@@ -7,12 +7,12 @@ part 'app_database.g.dart';
 
 const _uuid = Uuid();
 
-@DriftDatabase(tables: [Exercises, Routines, RoutineExercises, Workouts, LoggedSets])
+@DriftDatabase(tables: [Exercises, Routines, RoutineExercises, WorkoutExercises, Workouts, LoggedSets])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -31,6 +31,17 @@ class AppDatabase extends _$AppDatabase {
           if (from < 3) {
             await m.addColumn(exercises, exercises.description);
             await m.addColumn(routineExercises, routineExercises.sectionName);
+          }
+          if (from < 4) {
+            await m.addColumn(routineExercises, routineExercises.notes);
+            await m.createTable(workoutExercises);
+          }
+          if (from < 5) {
+            await m.addColumn(routines, routines.isDraft);
+          }
+          if (from < 6) {
+            await m.addColumn(routineExercises, routineExercises.useLbs);
+            await m.addColumn(workoutExercises, workoutExercises.useLbs);
           }
         },
       );
@@ -105,13 +116,31 @@ class AppDatabase extends _$AppDatabase {
   // ─── Routine DAO ───────────────────────────────────────────────────────────
 
   Future<List<Routine>> getAllRoutines() =>
-      (select(routines)..where((r) => r.isDeleted.equals(false))).get();
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(false)))
+          .get();
 
   Stream<List<Routine>> watchAllRoutines() =>
-      (select(routines)..where((r) => r.isDeleted.equals(false))).watch();
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(false)))
+          .watch();
 
   Future<Routine?> getRoutineById(int id) =>
       (select(routines)..where((r) => r.id.equals(id))).getSingleOrNull();
+
+  Future<Routine?> getDraftRoutine() =>
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(true))
+            ..orderBy([(r) => OrderingTerm.desc(r.lastModifiedAt)])
+            ..limit(1))
+          .getSingleOrNull();
+
+  Stream<Routine?> watchDraftRoutine() =>
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(true))
+            ..orderBy([(r) => OrderingTerm.desc(r.lastModifiedAt)])
+            ..limit(1))
+          .watchSingleOrNull();
 
   Future<int> insertRoutine(RoutinesCompanion entry) => into(routines).insert(
         entry.copyWith(
@@ -250,6 +279,98 @@ class AppDatabase extends _$AppDatabase {
           remote.copyWith(syncStatus: const Value(0)),
         );
       }
+    }
+  }
+
+  // ─── WorkoutExercise DAO ───────────────────────────────────────────────────
+
+  Future<List<WorkoutExerciseEntry>> getWorkoutExercises(int workoutId) =>
+      (select(workoutExercises)
+            ..where((we) =>
+                we.workoutId.equals(workoutId) & we.isDeleted.equals(false))
+            ..orderBy([(we) => OrderingTerm.asc(we.displayOrder)]))
+          .get();
+
+  Stream<List<WorkoutExerciseEntry>> watchWorkoutExercises(int workoutId) =>
+      (select(workoutExercises)
+            ..where((we) =>
+                we.workoutId.equals(workoutId) & we.isDeleted.equals(false))
+            ..orderBy([(we) => OrderingTerm.asc(we.displayOrder)]))
+          .watch();
+
+  Future<int> upsertWorkoutExercise(WorkoutExercisesCompanion entry) async {
+    final existing = await (select(workoutExercises)
+          ..where((we) =>
+              we.workoutId.equals(entry.workoutId.value) &
+              we.exerciseId.equals(entry.exerciseId.value) &
+              we.isDeleted.equals(false))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) {
+      await (update(workoutExercises)..where((we) => we.id.equals(existing.id)))
+          .write(entry.copyWith(
+        lastModifiedAt: Value(DateTime.now()),
+        syncStatus: const Value(1),
+      ));
+      return existing.id;
+    }
+    return into(workoutExercises).insert(
+      entry.copyWith(
+        clientId: Value(_uuid.v4()),
+        lastModifiedAt: Value(DateTime.now()),
+        syncStatus: const Value(1),
+      ),
+    );
+  }
+
+  Future<void> updateWorkoutExerciseNotes(int id, String notes) =>
+      (update(workoutExercises)..where((we) => we.id.equals(id))).write(
+        WorkoutExercisesCompanion(
+          notes: Value(notes),
+          lastModifiedAt: Value(DateTime.now()),
+          syncStatus: const Value(1),
+        ),
+      );
+
+  Future<void> updateWorkoutExerciseUseLbs(int id, bool? useLbs) =>
+      (update(workoutExercises)..where((we) => we.id.equals(id))).write(
+        WorkoutExercisesCompanion(
+          useLbs: Value(useLbs),
+          lastModifiedAt: Value(DateTime.now()),
+          syncStatus: const Value(1),
+        ),
+      );
+
+  Future<void> updateWorkoutExerciseOrder(int id, int displayOrder) =>
+      (update(workoutExercises)..where((we) => we.id.equals(id))).write(
+        WorkoutExercisesCompanion(
+          displayOrder: Value(displayOrder),
+          lastModifiedAt: Value(DateTime.now()),
+          syncStatus: const Value(1),
+        ),
+      );
+
+  Future<void> softDeleteWorkoutExercise(int id) =>
+      (update(workoutExercises)..where((we) => we.id.equals(id))).write(
+        WorkoutExercisesCompanion(
+          isDeleted: const Value(true),
+          lastModifiedAt: Value(DateTime.now()),
+          syncStatus: const Value(1),
+        ),
+      );
+
+  Future<void> reorderWorkoutExercises(
+      int workoutId, List<int> orderedExerciseIds) async {
+    for (var i = 0; i < orderedExerciseIds.length; i++) {
+      await (update(workoutExercises)
+            ..where((we) =>
+                we.workoutId.equals(workoutId) &
+                we.exerciseId.equals(orderedExerciseIds[i])))
+          .write(WorkoutExercisesCompanion(
+        displayOrder: Value(i),
+        lastModifiedAt: Value(DateTime.now()),
+        syncStatus: const Value(1),
+      ));
     }
   }
 

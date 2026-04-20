@@ -100,6 +100,7 @@ class _WorkoutHistoryTile extends ConsumerStatefulWidget {
 
 class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
   bool _isExpanded = false;
+  bool _isEditing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +110,9 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
         : Duration.zero;
     final dateStr = DateFormat('EEE, MMM d').format(workout.startTime);
     final timeStr = DateFormat('h:mm a').format(workout.startTime);
+
+    // Eagerly subscribe so sets are loaded before expansion
+    ref.watch(workoutSetsProvider(workout.id));
 
     // Get routine name if linked
     final routineData = workout.routineId != null
@@ -131,75 +135,79 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
       child: Column(
         children: [
           // Main tile
-          InkWell(
-            borderRadius: BorderRadius.circular(16),
+          ListTile(
+            contentPadding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
             onTap: () => setState(() => _isExpanded = !_isExpanded),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+            leading: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Date icon
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          DateFormat('d').format(workout.startTime),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            height: 1,
-                          ),
-                        ),
-                        Text(
-                          DateFormat('MMM').format(workout.startTime),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    DateFormat('d').format(workout.startTime),
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      height: 1,
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          routineName ?? 'Free Workout',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$dateStr · $timeStr · ${Formatters.duration(duration)}',
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    DateFormat('MMM').format(workout.startTime),
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
                     ),
-                  ),
-                  AnimatedRotation(
-                    turns: _isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more_rounded,
-                        color: AppColors.textMuted),
                   ),
                 ],
               ),
+            ),
+            title: Text(
+              routineName ?? 'Free Workout',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            subtitle: Text(
+              '$dateStr · $timeStr · ${Formatters.duration(duration)}',
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _isEditing
+                        ? Icons.edit_off_rounded
+                        : Icons.edit_outlined,
+                    color: _isEditing
+                        ? AppColors.primary
+                        : AppColors.textMuted,
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() {
+                    if (!_isEditing) _isExpanded = true;
+                    _isEditing = !_isEditing;
+                  }),
+                  visualDensity: VisualDensity.compact,
+                ),
+                AnimatedRotation(
+                  turns: _isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(Icons.expand_more_rounded,
+                      color: AppColors.textMuted),
+                ),
+              ],
             ),
           ),
 
@@ -208,6 +216,8 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
             WorkoutDetails(
               workoutId: workout.id,
               useLbs: widget.useLbs,
+              isEditing: _isEditing,
+              onEditDone: () => setState(() => _isEditing = false),
             ),
         ],
       ),

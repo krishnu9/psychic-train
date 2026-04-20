@@ -12,6 +12,7 @@ import 'routines/routine_list_screen.dart';
 import 'history/history_screen.dart';
 import 'settings_screen.dart';
 import 'workout/active_workout_screen.dart';
+import 'workout/minimized_workout_bar.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -102,11 +103,16 @@ class _AppShellState extends ConsumerState<AppShell> {
     // Listen for incomplete workouts to prompt resume
     ref.listen<AsyncValue<Workout?>>(incompleteWorkoutProvider, (prev, next) {
       final workout = next.valueOrNull;
-      if (workout != null && !_hasPromptedResume && prev?.isLoading == true) {
+      if (workout != null && !_hasPromptedResume && prev?.isLoading == true &&
+          !ref.read(workoutMinimizedProvider)) {
         _hasPromptedResume = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _showResumeWorkoutDialog(workout);
         });
+      }
+      // Auto-hide minimized bar when workout finishes (data state with null)
+      if (next is AsyncData && workout == null) {
+        ref.read(workoutMinimizedProvider.notifier).state = false;
       }
     });
 
@@ -114,9 +120,19 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (!isAuthenticated) return const AuthScreen();
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentIndex,
+            children: _screens,
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 84, // above the floating nav bar
+            child: const MinimizedWorkoutBar(),
+          ),
+        ],
       ),
       bottomNavigationBar: _FloatingNavBar(
         currentIndex: _currentIndex,

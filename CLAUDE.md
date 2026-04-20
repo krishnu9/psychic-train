@@ -55,6 +55,23 @@ See `ARCHITECTURE.md` for full context. Summary of what matters for development:
 
 **Environment:** Supabase credentials are loaded from `.env` via `flutter_dotenv`. This file is not committed to git.
 
+## Graphify
+
+Graphify maps the codebase into a queryable knowledge graph for faster AI-assisted navigation.
+
+**Venv:** `.venv/` in project root (not committed to git).
+
+**One-time setup:**
+```bash
+python3 -m venv .venv
+.venv/bin/pip install graphifyy
+.venv/bin/graphify install
+```
+
+**Usage in Claude Code:** `/graphify lib/` — builds/updates the graph from the Flutter source.
+**Incremental update:** `/graphify lib/ --update` — re-extracts only changed files.
+**Graph output:** `graphify-out/graph.html` (open in browser), `graphify-out/GRAPH_REPORT.md`.
+
 ## Planned features (PLAN.md)
 
 1. Markdown support for routine descriptions

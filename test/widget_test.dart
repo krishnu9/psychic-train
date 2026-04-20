@@ -2,14 +2,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymapp/app.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:gymapp/providers/providers.dart';
 
 void main() {
   testWidgets('App starts and shows GymApp title', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
           routinesProvider.overrideWith((ref) => Stream.value([])),
           exercisesProvider.overrideWith((ref) => Stream.value([])),
           workoutsProvider.overrideWith((ref) => Stream.value([])),

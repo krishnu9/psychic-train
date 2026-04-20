@@ -30,3 +30,9 @@ Add an option to minimize the current workout into a compact floating bar at the
 
 ## 12. Notification when workout exceeds 1.5 hours
 Send a local push notification prompting the user to finish or cancel their workout if it has been running for more than 90 minutes. Requires setting up Flutter local notifications and a background timer/alarm. Best implemented last as it depends on a stable active workout flow.
+
+## 13. Hide add-exercise button when keyboard is open
+Hide the "Add exercise" button in the active workout / routine edit screens while the user is typing a value (weight, reps, notes) and the on-screen keyboard is visible. Button should reappear once the keyboard is dismissed. Prevents the button from overlapping input fields and reduces mis-taps.
+
+## 14. Stick resume-workout bar to bottom navigation
+The minimized "Resume Workout" bar currently floats and does not stick to the bottom navigation / tab bar. Dock it directly above the bottom nav so it behaves as a persistent strip across screens instead of overlapping content.

@@ -30,6 +30,7 @@ void main() {
       colorHex: 'FF6366F1',
       createdAt: DateTime.now(),
       lastModifiedAt: DateTime.now(),
+      isDraft: false,
       syncStatus: 0,
       isDeleted: false,
     );

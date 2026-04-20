@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
 import '../../database/app_database.dart';
 import '../../utils/formatters.dart';
+import '../../utils/weight_conversions.dart';
 import '../exercises/exercise_picker.dart';
 
 /// The "Gym Mode" – active workout logging screen.
@@ -45,52 +46,68 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   void initState() {
     super.initState();
     _stopwatch = Stopwatch()..start();
-    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {
-          _elapsed = Formatters.duration(_stopwatch.elapsed + _elapsedOffset);
-        });
-      }
-    });
     _loadWorkoutStartTime();
     _loadExistingSetsOrRoutine();
   }
 
   Future<void> _loadWorkoutStartTime() async {
-    final workout = await ref.read(workoutRepositoryProvider).getById(widget.workoutId);
-    if (workout != null && mounted) {
+    Workout? workout;
+    try {
+      workout = await ref.read(workoutRepositoryProvider).getById(widget.workoutId);
+    } catch (_) {
+      // Workout lookup failed — timer will not start (graceful degradation)
+    }
+    if (!mounted) return;
+    if (workout != null) {
       setState(() {
-        final raw = DateTime.now().difference(workout.startTime);
+        final raw = DateTime.now().difference(workout!.startTime);
         _elapsedOffset = raw.isNegative ? Duration.zero : raw;
+      });
+    }
+    // Only start the periodic timer once we know the workout exists
+    if (workout != null && mounted) {
+      _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) {
+          setState(() {
+            _elapsed = Formatters.duration(_stopwatch.elapsed + _elapsedOffset);
+          });
+        }
       });
     }
   }
 
   Future<void> _loadExistingSetsOrRoutine() async {
-    final existingSets = await ref.read(workoutRepositoryProvider).getSets(widget.workoutId);
+    try {
+    final workoutRepo = ref.read(workoutRepositoryProvider);
+    final existingSets = await workoutRepo.getSets(widget.workoutId);
+    final workoutExercises = await workoutRepo.getWorkoutExercises(widget.workoutId);
+    final weMap = <int, WorkoutExerciseEntry>{
+      for (final we in workoutExercises) we.exerciseId: we
+    };
+
     if (existingSets.isNotEmpty && widget.routineId != null) {
-      // Resuming a routine-based workout: merge routine template with logged sets
-      await _restoreRoutineWithProgress(existingSets);
+      await _restoreRoutineWithProgress(existingSets, weMap);
     } else if (existingSets.isNotEmpty) {
-      // Resuming an empty workout (no routine): only logged sets available
-      await _restoreFromLoggedSets(existingSets);
+      await _restoreFromLoggedSets(existingSets, weMap);
     } else {
-      await _loadRoutineExercises();
+      await _loadRoutineExercises(weMap);
+    }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _restoreRoutineWithProgress(List<LoggedSet> loggedSets) async {
+  Future<void> _restoreRoutineWithProgress(
+      List<LoggedSet> loggedSets, Map<int, WorkoutExerciseEntry> weMap) async {
     final exerciseRepo = ref.read(exerciseRepositoryProvider);
     final routineRepo = ref.read(routineRepositoryProvider);
     final workoutRepo = ref.read(workoutRepositoryProvider);
 
-    // Build lookup: exerciseId → logged sets for this workout
     final loggedByExercise = <int, List<LoggedSet>>{};
     for (final s in loggedSets) {
       loggedByExercise.putIfAbsent(s.exerciseId, () => []).add(s);
     }
 
-    // Load routine exercises in displayOrder
     final routineExercises = await routineRepo.getExercises(widget.routineId!);
     final routineExerciseIds = <int>{};
 
@@ -101,10 +118,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
       final logged = loggedByExercise[re.exerciseId] ?? [];
       final lastSets = await workoutRepo.getLastSetsForExercise(re.exerciseId);
+      final we = weMap[re.exerciseId];
 
       final sets = <_SetData>[];
-
-      // Completed sets from the current workout
       for (final s in logged) {
         sets.add(_SetData(
           setNumber: s.setNumber,
@@ -115,8 +131,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           loggedSetId: s.id,
         ));
       }
-
-      // Remaining sets up to targetSets (editable, pre-filled)
       for (var i = logged.length; i < re.targetSets; i++) {
         final setNum = i + 1;
         final lastSet = lastSets.where((s) => s.setNumber == setNum).firstOrNull;
@@ -132,15 +146,18 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         sets: sets,
         lastSets: lastSets,
         sectionName: re.sectionName,
+        workoutExerciseId: we?.id,
+        notes: we?.notes ?? '',
+        useLbsOverride: we?.useLbs ?? re.useLbs,
       ));
     }
 
-    // Append any exercises added mid-workout that aren't part of the routine
     for (final entry in loggedByExercise.entries) {
       if (routineExerciseIds.contains(entry.key)) continue;
       final exercise = await exerciseRepo.getById(entry.key);
       if (exercise == null) continue;
       final lastSets = await workoutRepo.getLastSetsForExercise(entry.key);
+      final we = weMap[entry.key];
       _exerciseDataList.add(_WorkoutExerciseData(
         exercise: exercise,
         sets: entry.value
@@ -154,14 +171,27 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 ))
             .toList(),
         lastSets: lastSets,
+        workoutExerciseId: we?.id,
+        notes: we?.notes ?? '',
+        useLbsOverride: we?.useLbs,
       ));
+    }
+
+    if (weMap.isNotEmpty) {
+      _exerciseDataList.sort((a, b) {
+        final aOrder = weMap[a.exercise.id]?.displayOrder ?? 0;
+        final bOrder = weMap[b.exercise.id]?.displayOrder ?? 0;
+        return aOrder.compareTo(bOrder);
+      });
     }
 
     setState(() => _isLoading = false);
   }
 
-  Future<void> _restoreFromLoggedSets(List<LoggedSet> loggedSets) async {
+  Future<void> _restoreFromLoggedSets(
+      List<LoggedSet> loggedSets, Map<int, WorkoutExerciseEntry> weMap) async {
     final exerciseRepo = ref.read(exerciseRepositoryProvider);
+    final workoutRepo = ref.read(workoutRepositoryProvider);
     final grouped = <int, List<LoggedSet>>{};
     for (final set in loggedSets) {
       grouped.putIfAbsent(set.exerciseId, () => []).add(set);
@@ -171,9 +201,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       final exercise = await exerciseRepo.getById(entry.key);
       if (exercise == null) continue;
 
-      final lastSets = await ref
-          .read(workoutRepositoryProvider)
-          .getLastSetsForExercise(entry.key);
+      final lastSets = await workoutRepo.getLastSetsForExercise(entry.key);
+      final we = weMap[entry.key];
 
       _exerciseDataList.add(_WorkoutExerciseData(
         exercise: exercise,
@@ -188,12 +217,24 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 ))
             .toList(),
         lastSets: lastSets,
+        workoutExerciseId: we?.id,
+        notes: we?.notes ?? '',
+        useLbsOverride: we?.useLbs,
       ));
     }
+
+    if (weMap.isNotEmpty) {
+      _exerciseDataList.sort((a, b) {
+        final aOrder = weMap[a.exercise.id]?.displayOrder ?? 0;
+        final bOrder = weMap[b.exercise.id]?.displayOrder ?? 0;
+        return aOrder.compareTo(bOrder);
+      });
+    }
+
     setState(() => _isLoading = false);
   }
 
-  Future<void> _loadRoutineExercises() async {
+  Future<void> _loadRoutineExercises(Map<int, WorkoutExerciseEntry> weMap) async {
     if (widget.routineId != null) {
       final routineExercises = await ref
           .read(routineRepositoryProvider)
@@ -205,10 +246,10 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
             exercises.where((e) => e.id == re.exerciseId).firstOrNull;
         if (exercise == null) continue;
 
-        // Get last-session data for pre-fill reference
         final lastSets = await ref
             .read(workoutRepositoryProvider)
             .getLastSetsForExercise(re.exerciseId);
+        final we = weMap[re.exerciseId];
 
         final sets = <_SetData>[];
         for (var i = 0; i < re.targetSets; i++) {
@@ -226,7 +267,18 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           sets: sets,
           lastSets: lastSets,
           sectionName: re.sectionName,
+          workoutExerciseId: we?.id,
+          notes: we?.notes ?? '',
+          useLbsOverride: we?.useLbs ?? re.useLbs,
         ));
+      }
+
+      if (weMap.isNotEmpty) {
+        _exerciseDataList.sort((a, b) {
+          final aOrder = weMap[a.exercise.id]?.displayOrder ?? 0;
+          final bOrder = weMap[b.exercise.id]?.displayOrder ?? 0;
+          return aOrder.compareTo(bOrder);
+        });
       }
     }
     setState(() => _isLoading = false);
@@ -315,6 +367,17 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         );
   }
 
+  Future<void> _toggleExerciseUnit(int exerciseIndex, bool useLbs) async {
+    final data = _exerciseDataList[exerciseIndex];
+    final weId = data.workoutExerciseId;
+    setState(() => data.useLbsOverride = useLbs);
+    if (weId != null) {
+      await ref
+          .read(workoutRepositoryProvider)
+          .setWorkoutExerciseUseLbs(weId, useLbs);
+    }
+  }
+
   void _addSetToExercise(int exerciseIndex) {
     setState(() {
       final exData = _exerciseDataList[exerciseIndex];
@@ -339,9 +402,13 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     );
 
     if (selected != null) {
-      final lastSets = await ref
-          .read(workoutRepositoryProvider)
-          .getLastSetsForExercise(selected.id);
+      final workoutRepo = ref.read(workoutRepositoryProvider);
+      final lastSets = await workoutRepo.getLastSetsForExercise(selected.id);
+      final weId = await workoutRepo.upsertWorkoutExercise(
+        workoutId: widget.workoutId,
+        exerciseId: selected.id,
+        displayOrder: _exerciseDataList.length,
+      );
 
       setState(() {
         _exerciseDataList.add(_WorkoutExerciseData(
@@ -359,9 +426,27 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
             },
           ),
           lastSets: lastSets,
+          workoutExerciseId: weId,
         ));
       });
     }
+  }
+
+  void _reorderExercises(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    setState(() {
+      final item = _exerciseDataList.removeAt(oldIndex);
+      _exerciseDataList.insert(newIndex, item);
+    });
+    final exerciseIds = _exerciseDataList.map((d) => d.exercise.id).toList();
+    ref
+        .read(workoutRepositoryProvider)
+        .reorderWorkoutExercises(widget.workoutId, exerciseIds);
+  }
+
+  void _minimizeWorkout() {
+    ref.read(workoutMinimizedProvider.notifier).state = true;
+    Navigator.pop(context);
   }
 
   Future<void> _cancelWorkout() async {
@@ -419,7 +504,10 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
             _SummaryRow(label: 'Total Sets', value: '$totalSets'),
             _SummaryRow(
               label: 'Total Volume',
-              value: Formatters.volume(totalVolume),
+              value: Formatters.volume(
+                totalVolume,
+                useLbs: ref.read(useLbsProvider),
+              ),
             ),
             _SummaryRow(
               label: 'Exercises',
@@ -471,6 +559,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     elapsed: _elapsed,
                     onFinish: _finishWorkout,
                     onCancel: _cancelWorkout,
+                    onMinimize: _minimizeWorkout,
                   ),
 
                   // ─── Exercise cards ─────────────────────
@@ -499,80 +588,97 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                   ],
                                 ),
                               )
-                            : ListView.builder(
-                                padding: const EdgeInsets.only(
-                                    bottom: 160, top: 8),
-                                itemCount:
-                                    _exerciseDataList.length + 1, // +1 for add button
-                                itemBuilder: (ctx, index) {
-                                  if (index ==
-                                      _exerciseDataList.length) {
-                                    return Padding(
-                                      padding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 8),
-                                      child: OutlinedButton.icon(
-                                        onPressed: _addExercise,
-                                        icon: const Icon(
-                                            Icons.add_rounded),
-                                        label: const Text(
-                                            'Add Exercise'),
-                                      ),
-                                    );
-                                  }
-                                  final data = _exerciseDataList[index];
-                                  final prevSection = index > 0
-                                      ? _exerciseDataList[index - 1].sectionName
-                                      : '';
-                                  final showHeader = data.sectionName.isNotEmpty &&
-                                      data.sectionName != prevSection;
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      if (showHeader)
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                width: 4,
-                                                height: 16,
-                                                decoration: BoxDecoration(
-                                                  color: AppColors.primary,
-                                                  borderRadius: BorderRadius.circular(2),
+                            : Column(
+                                children: [
+                                  Expanded(
+                                    child: ReorderableListView.builder(
+                                      padding: const EdgeInsets.only(
+                                          top: 8, bottom: 8),
+                                      itemCount: _exerciseDataList.length,
+                                      onReorder: _reorderExercises,
+                                      itemBuilder: (ctx, index) {
+                                        final data = _exerciseDataList[index];
+                                        final prevSection = index > 0
+                                            ? _exerciseDataList[index - 1].sectionName
+                                            : '';
+                                        final showHeader =
+                                            data.sectionName.isNotEmpty &&
+                                                data.sectionName != prevSection;
+                                        return Column(
+                                          key: ValueKey(data.exercise.id),
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            if (showHeader)
+                                              Padding(
+                                                padding: const EdgeInsets.fromLTRB(
+                                                    20, 12, 20, 4),
+                                                child: Row(
+                                                  children: [
+                                                    Container(
+                                                      width: 4,
+                                                      height: 16,
+                                                      decoration: BoxDecoration(
+                                                        color: AppColors.primary,
+                                                        borderRadius:
+                                                            BorderRadius.circular(2),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      data.sectionName,
+                                                      style: const TextStyle(
+                                                        color: AppColors.primary,
+                                                        fontWeight: FontWeight.w700,
+                                                        fontSize: 13,
+                                                        letterSpacing: 0.3,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                data.sectionName,
-                                                style: const TextStyle(
-                                                  color: AppColors.primary,
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 13,
-                                                  letterSpacing: 0.3,
-                                                ),
+                                            _ExerciseCard(
+                                              data: data,
+                                              exerciseIndex: index,
+                                              useLbs: resolveUseLbs(
+                                                workoutExercise:
+                                                    data.useLbsOverride,
+                                                global: useLbs,
                                               ),
-                                            ],
-                                          ),
-                                        ),
-                                      _ExerciseCard(
-                                        data: data,
-                                        exerciseIndex: index,
-                                        useLbs: useLbs,
-                                        onCompleteSet: _completeSet,
-                                        onUncompleteSet: _uncompleteSet,
-                                        onUpdateSet: _updateSet,
-                                        onAddSet: _addSetToExercise,
-                                        onRemove: () {
-                                          setState(() {
-                                            _exerciseDataList.removeAt(index);
-                                          });
-                                        },
-                                      ),
-                                    ],
-                                  );
-                                },
+                                              onCompleteSet: _completeSet,
+                                              onUncompleteSet: _uncompleteSet,
+                                              onUpdateSet: _updateSet,
+                                              onAddSet: _addSetToExercise,
+                                              onToggleUnit: (v) =>
+                                                  _toggleExerciseUnit(index, v),
+                                              onNotesChanged: (weId, notes) {
+                                                data.notes = notes;
+                                                ref
+                                                    .read(workoutRepositoryProvider)
+                                                    .updateWorkoutExerciseNotes(
+                                                        weId, notes);
+                                              },
+                                              onRemove: () {
+                                                setState(() {
+                                                  _exerciseDataList.removeAt(index);
+                                                });
+                                              },
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        16, 4, 16, 80),
+                                    child: OutlinedButton.icon(
+                                      onPressed: _addExercise,
+                                      icon: const Icon(Icons.add_rounded),
+                                      label: const Text('Add Exercise'),
+                                    ),
+                                  ),
+                                ],
                               ),
                   ),
                 ],
@@ -604,17 +710,25 @@ class _WorkoutExerciseData {
   final List<_SetData> sets;
   final List<LoggedSet> lastSets;
   final String sectionName;
+  final int? workoutExerciseId;
+  String notes;
+  // Per-exercise unit override: null = follow global toggle, true = lbs, false = kg.
+  bool? useLbsOverride;
 
   _WorkoutExerciseData({
     required this.exercise,
     required this.sets,
     required this.lastSets,
     this.sectionName = '',
+    this.workoutExerciseId,
+    this.notes = '',
+    this.useLbsOverride,
   });
 }
 
 class _SetData {
   int setNumber;
+  // Always stored in kg (canonical). Display conversion happens in the UI.
   double weight;
   int reps;
   int setType;
@@ -637,11 +751,13 @@ class _WorkoutHeader extends StatelessWidget {
   final String elapsed;
   final VoidCallback onFinish;
   final VoidCallback onCancel;
+  final VoidCallback onMinimize;
 
   const _WorkoutHeader({
     required this.elapsed,
     required this.onFinish,
     required this.onCancel,
+    required this.onMinimize,
   });
 
   @override
@@ -689,6 +805,13 @@ class _WorkoutHeader extends StatelessWidget {
               ],
             ),
           ),
+          // Minimize button
+          IconButton(
+            onPressed: onMinimize,
+            tooltip: 'Minimize',
+            icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                color: AppColors.textMuted, size: 24),
+          ),
           const Spacer(),
           // Finish button
           ElevatedButton(
@@ -710,7 +833,7 @@ class _WorkoutHeader extends StatelessWidget {
   }
 }
 
-class _ExerciseCard extends StatelessWidget {
+class _ExerciseCard extends StatefulWidget {
   final _WorkoutExerciseData data;
   final int exerciseIndex;
   final bool useLbs;
@@ -718,6 +841,8 @@ class _ExerciseCard extends StatelessWidget {
   final Future<void> Function(int, int) onUncompleteSet;
   final Future<void> Function(int, int) onUpdateSet;
   final void Function(int) onAddSet;
+  final ValueChanged<bool> onToggleUnit;
+  final void Function(int weId, String notes)? onNotesChanged;
   final VoidCallback onRemove;
 
   const _ExerciseCard({
@@ -728,11 +853,36 @@ class _ExerciseCard extends StatelessWidget {
     required this.onUncompleteSet,
     required this.onUpdateSet,
     required this.onAddSet,
+    required this.onToggleUnit,
+    this.onNotesChanged,
     required this.onRemove,
   });
 
   @override
+  State<_ExerciseCard> createState() => _ExerciseCardState();
+}
+
+class _ExerciseCardState extends State<_ExerciseCard> {
+  late final TextEditingController _notesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _notesController = TextEditingController(text: widget.data.notes);
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final data = widget.data;
+    final useLbs = widget.useLbs;
+    final exerciseIndex = widget.exerciseIndex;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
@@ -764,7 +914,7 @@ class _ExerciseCard extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            'Last: ${data.lastSets.map((s) => '${s.weight}×${s.reps}').join(', ')}',
+                            'Last: ${data.lastSets.map((s) => '${_displayWeight(s.weight, useLbs)}×${s.reps}').join(', ')}',
                             style: const TextStyle(
                               color: AppColors.textMuted,
                               fontSize: 11,
@@ -774,25 +924,64 @@ class _ExerciseCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                _UnitToggle(
+                  useLbs: useLbs,
+                  onChanged: widget.onToggleUnit,
+                ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded,
                       color: AppColors.textMuted, size: 18),
-                  onPressed: onRemove,
+                  onPressed: widget.onRemove,
                   visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
           ),
 
+          // Notes field
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              controller: _notesController,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.surfaceLight,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                hintText: 'Notes...',
+                hintStyle:
+                    const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                isDense: true,
+                prefixIcon: const Icon(Icons.notes_rounded,
+                    color: AppColors.textMuted, size: 16),
+              ),
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.textPrimary),
+              maxLines: 1,
+              onChanged: (v) {
+                final weId = data.workoutExerciseId;
+                if (weId != null) widget.onNotesChanged?.call(weId, v);
+              },
+            ),
+          ),
+
           // Column headers
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                SizedBox(width: 36, child: Text('SET', style: _headerStyle)),
-                Expanded(child: Text('KG', style: _headerStyle, textAlign: TextAlign.center)),
-                Expanded(child: Text('REPS', style: _headerStyle, textAlign: TextAlign.center)),
-                SizedBox(width: 52),
+                const SizedBox(width: 36, child: Text('SET', style: _headerStyle)),
+                Expanded(
+                    child: Text(useLbs ? 'LBS' : 'KG',
+                        style: _headerStyle, textAlign: TextAlign.center)),
+                const Expanded(
+                    child: Text('REPS',
+                        style: _headerStyle, textAlign: TextAlign.center)),
+                const SizedBox(width: 52),
               ],
             ),
           ),
@@ -805,9 +994,9 @@ class _ExerciseCard extends StatelessWidget {
             return _SetRow(
               setData: setData,
               useLbs: useLbs,
-              onComplete: () => onCompleteSet(exerciseIndex, setIndex),
-              onUncomplete: () => onUncompleteSet(exerciseIndex, setIndex),
-              onUpdateSet: () => onUpdateSet(exerciseIndex, setIndex),
+              onComplete: () => widget.onCompleteSet(exerciseIndex, setIndex),
+              onUncomplete: () => widget.onUncompleteSet(exerciseIndex, setIndex),
+              onUpdateSet: () => widget.onUpdateSet(exerciseIndex, setIndex),
               onWeightChanged: (v) => setData.weight = v,
               onRepsChanged: (v) => setData.reps = v,
             );
@@ -817,7 +1006,7 @@ class _ExerciseCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: GestureDetector(
-              onTap: () => onAddSet(exerciseIndex),
+              onTap: () => widget.onAddSet(exerciseIndex),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -854,6 +1043,42 @@ const _headerStyle = TextStyle(
   letterSpacing: 0.5,
 );
 
+String _displayWeight(double kg, bool useLbs) {
+  final v = useLbs ? kgToLbs(kg) : kg;
+  if (v == v.roundToDouble()) return v.toInt().toString();
+  return v.toStringAsFixed(1);
+}
+
+class _UnitToggle extends StatelessWidget {
+  final bool useLbs;
+  final ValueChanged<bool> onChanged;
+
+  const _UnitToggle({required this.useLbs, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!useLbs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          useLbs ? 'LBS' : 'KG',
+          style: const TextStyle(
+            color: AppColors.primary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SetRow extends StatefulWidget {
   final _SetData setData;
   final bool useLbs;
@@ -884,16 +1109,31 @@ class _SetRowState extends State<_SetRow> {
   @override
   void initState() {
     super.initState();
-    _weightCtrl = TextEditingController(
-      text: widget.setData.weight > 0
-          ? widget.setData.weight.toString()
-          : '',
-    );
+    _weightCtrl =
+        TextEditingController(text: _formatWeight(widget.setData.weight));
     _repsCtrl = TextEditingController(
       text: widget.setData.reps > 0
           ? widget.setData.reps.toString()
           : '',
     );
+  }
+
+  @override
+  void didUpdateWidget(_SetRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // When the unit flips, re-render the field with the converted value. We
+    // only repopulate on unit change (not on every rebuild) so we don't clobber
+    // what the user is currently typing.
+    if (oldWidget.useLbs != widget.useLbs) {
+      _weightCtrl.text = _formatWeight(widget.setData.weight);
+    }
+  }
+
+  String _formatWeight(double kg) {
+    if (kg <= 0) return '';
+    final display = widget.useLbs ? kgToLbs(kg) : kg;
+    if (display == display.roundToDouble()) return display.toInt().toString();
+    return display.toStringAsFixed(1);
   }
 
   @override
@@ -959,7 +1199,9 @@ class _SetRowState extends State<_SetRow> {
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                 ),
                 onChanged: (v) {
-                  widget.onWeightChanged(double.tryParse(v) ?? 0);
+                  final typed = double.tryParse(v) ?? 0;
+                  final kg = widget.useLbs ? lbsToKg(typed) : typed;
+                  widget.onWeightChanged(kg);
                   if (isCompleted) widget.onUpdateSet();
                 },
               ),

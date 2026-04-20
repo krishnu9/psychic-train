@@ -67,8 +67,7 @@ class SettingsScreen extends ConsumerWidget {
                     ],
                     selected: {useLbs},
                     onSelectionChanged: (value) {
-                      ref.read(useLbsProvider.notifier).state =
-                          value.first;
+                      ref.read(useLbsProvider.notifier).set(value.first);
                     },
                     style: ButtonStyle(
                       backgroundColor:
