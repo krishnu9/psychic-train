@@ -1,6 +1,9 @@
 # Python venv
 .venv/
 
+# Android credentials (not committed)
+android/app/google-services.json
+
 # Miscellaneous
 *.class
 *.log
