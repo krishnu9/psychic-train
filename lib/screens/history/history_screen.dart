@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
 import '../../database/app_database.dart';
 import '../../utils/formatters.dart';
+import '../../utils/weight_conversions.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -258,22 +259,32 @@ class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
     super.dispose();
   }
 
-  void _initControllers(List<LoggedSet> sets) {
+  void _initControllers(List<LoggedSet> sets, Map<int, bool> unitByExercise) {
     for (final s in sets) {
+      final useLbs = unitByExercise[s.exerciseId] ?? widget.useLbs;
+      final display = useLbs ? kgToLbs(s.weight) : s.weight;
       _weightCtrls.putIfAbsent(
-          s.id, () => TextEditingController(text: s.weight.toString()));
+          s.id, () => TextEditingController(text: _fmt(display)));
       _repsCtrls.putIfAbsent(
           s.id, () => TextEditingController(text: s.reps.toString()));
     }
   }
 
-  Future<void> _saveEdits(List<LoggedSet> sets) async {
+  static String _fmt(double v) {
+    if (v == v.roundToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(1);
+  }
+
+  Future<void> _saveEdits(
+      List<LoggedSet> sets, Map<int, bool> unitByExercise) async {
     final workoutRepo = ref.read(workoutRepositoryProvider);
     for (final s in sets) {
-      final weight = double.tryParse(_weightCtrls[s.id]?.text ?? '');
+      final typed = double.tryParse(_weightCtrls[s.id]?.text ?? '');
       final reps = int.tryParse(_repsCtrls[s.id]?.text ?? '');
-      if (weight != null && reps != null) {
-        await workoutRepo.updateSet(s.id, weight: weight, reps: reps);
+      if (typed != null && reps != null) {
+        final useLbs = unitByExercise[s.exerciseId] ?? widget.useLbs;
+        final kg = useLbs ? lbsToKg(typed) : typed;
+        await workoutRepo.updateSet(s.id, weight: kg, reps: reps);
       }
     }
     widget.onEditDone();
@@ -282,6 +293,7 @@ class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
   @override
   Widget build(BuildContext context) {
     final setsAsync = ref.watch(workoutSetsProvider(widget.workoutId));
+    final weAsync = ref.watch(workoutExercisesProvider(widget.workoutId));
 
     return setsAsync.when(
       data: (sets) {
@@ -293,7 +305,17 @@ class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
           );
         }
 
-        _initControllers(sets);
+        // Resolve per-exercise unit preference from the WorkoutExercise row.
+        final weList = weAsync.valueOrNull ?? const <WorkoutExerciseEntry>[];
+        final unitByExercise = <int, bool>{
+          for (final we in weList)
+            we.exerciseId: resolveUseLbs(
+              workoutExercise: we.useLbs,
+              global: widget.useLbs,
+            ),
+        };
+
+        _initControllers(sets, unitByExercise);
 
         final grouped = <int, List<LoggedSet>>{};
         for (final s in sets) {
@@ -338,6 +360,8 @@ class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
               final exName =
                   exerciseNames[entry.key] ?? 'Exercise #${entry.key}';
               final exSets = entry.value;
+              final exUseLbs =
+                  unitByExercise[entry.key] ?? widget.useLbs;
               return Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                 child: Column(
@@ -379,7 +403,7 @@ class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
                                         borderRadius:
                                             BorderRadius.circular(6),
                                       ),
-                                      hintText: 'kg',
+                                      hintText: exUseLbs ? 'lbs' : 'kg',
                                     ),
                                   ),
                                 ),
@@ -412,7 +436,7 @@ class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
                         : Padding(
                             padding: const EdgeInsets.only(left: 8),
                             child: Text(
-                              'Set ${s.setNumber}: ${Formatters.weight(s.weight, useLbs: widget.useLbs)} × ${s.reps} reps',
+                              'Set ${s.setNumber}: ${Formatters.weight(s.weight, useLbs: exUseLbs)} × ${s.reps} reps',
                               style: const TextStyle(
                                 color: AppColors.textMuted,
                                 fontSize: 12,
@@ -435,7 +459,7 @@ class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: () => _saveEdits(sets),
+                      onPressed: () => _saveEdits(sets, unitByExercise),
                       child: const Text('Save'),
                     ),
                   ],

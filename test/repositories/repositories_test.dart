@@ -169,6 +169,56 @@ void main() {
       expect(workout, isNotNull);
       expect(workout!.id, workoutId);
     });
+
+    test('start() copies per-exercise useLbs from routine to workout', () async {
+      final routineId = await routineRepo.create(name: 'Mixed Units');
+      final exercises = await exerciseRepo.getAll();
+      final bench = exercises.firstWhere((e) => e.name == 'Barbell Bench Press').id;
+      final curl = exercises.firstWhere((e) => e.name == 'Dumbbell Curl').id;
+
+      await routineRepo.addExercise(routineId, bench, 0, useLbs: false);
+      await routineRepo.addExercise(routineId, curl, 1, useLbs: true);
+
+      final workoutId = await workoutRepo.start(routineId: routineId);
+      final we = await workoutRepo.getWorkoutExercises(workoutId);
+      expect(we.firstWhere((w) => w.exerciseId == bench).useLbs, isFalse);
+      expect(we.firstWhere((w) => w.exerciseId == curl).useLbs, isTrue);
+    });
+
+    test('setWorkoutExerciseUseLbs toggles the per-exercise unit', () async {
+      final workoutId = await workoutRepo.start();
+      final exercises = await exerciseRepo.getAll();
+      final squatId = exercises.firstWhere((e) => e.name.contains('Squat')).id;
+      final weId = await workoutRepo.upsertWorkoutExercise(
+        workoutId: workoutId,
+        exerciseId: squatId,
+      );
+
+      await workoutRepo.setWorkoutExerciseUseLbs(weId, true);
+      var we = await workoutRepo.getWorkoutExercises(workoutId);
+      expect(we.first.useLbs, isTrue);
+
+      await workoutRepo.setWorkoutExerciseUseLbs(weId, null);
+      we = await workoutRepo.getWorkoutExercises(workoutId);
+      expect(we.first.useLbs, isNull);
+    });
+  });
+
+  group('RoutineRepository - per-exercise unit', () {
+    test('setExerciseUseLbs sets and clears the override', () async {
+      final routineId = await routineRepo.create(name: 'Unit Toggle');
+      final exercises = await exerciseRepo.getAll();
+      final bench = exercises.firstWhere((e) => e.name == 'Barbell Bench Press').id;
+      final reId = await routineRepo.addExercise(routineId, bench, 0);
+
+      await routineRepo.setExerciseUseLbs(reId, true);
+      var entries = await routineRepo.getExercises(routineId);
+      expect(entries.first.useLbs, isTrue);
+
+      await routineRepo.setExerciseUseLbs(reId, null);
+      entries = await routineRepo.getExercises(routineId);
+      expect(entries.first.useLbs, isNull);
+    });
   });
 
   group('ExerciseRepository - filtering', () {

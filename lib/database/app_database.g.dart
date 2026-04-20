@@ -702,10 +702,7 @@ class $RoutinesTable extends Routines with TableInfo<$RoutinesTable, Routine> {
     'name',
     aliasedName,
     false,
-    additionalChecks: GeneratedColumn.checkTextLength(
-      minTextLength: 1,
-      maxTextLength: 100,
-    ),
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 100),
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
@@ -743,6 +740,21 @@ class $RoutinesTable extends Routines with TableInfo<$RoutinesTable, Routine> {
     false,
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isDraftMeta = const VerificationMeta(
+    'isDraft',
+  );
+  @override
+  late final GeneratedColumn<bool> isDraft = GeneratedColumn<bool>(
+    'is_draft',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_draft" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
   );
   static const VerificationMeta _lastModifiedAtMeta = const VerificationMeta(
     'lastModifiedAt',
@@ -791,6 +803,7 @@ class $RoutinesTable extends Routines with TableInfo<$RoutinesTable, Routine> {
     description,
     colorHex,
     createdAt,
+    isDraft,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -849,6 +862,12 @@ class $RoutinesTable extends Routines with TableInfo<$RoutinesTable, Routine> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('is_draft')) {
+      context.handle(
+        _isDraftMeta,
+        isDraft.isAcceptableOrUnknown(data['is_draft']!, _isDraftMeta),
+      );
+    }
     if (data.containsKey('last_modified_at')) {
       context.handle(
         _lastModifiedAtMeta,
@@ -905,6 +924,10 @@ class $RoutinesTable extends Routines with TableInfo<$RoutinesTable, Routine> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      isDraft: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_draft'],
+      )!,
       lastModifiedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_modified_at'],
@@ -933,6 +956,7 @@ class Routine extends DataClass implements Insertable<Routine> {
   final String description;
   final String colorHex;
   final DateTime createdAt;
+  final bool isDraft;
   final DateTime lastModifiedAt;
   final int syncStatus;
   final bool isDeleted;
@@ -943,6 +967,7 @@ class Routine extends DataClass implements Insertable<Routine> {
     required this.description,
     required this.colorHex,
     required this.createdAt,
+    required this.isDraft,
     required this.lastModifiedAt,
     required this.syncStatus,
     required this.isDeleted,
@@ -956,6 +981,7 @@ class Routine extends DataClass implements Insertable<Routine> {
     map['description'] = Variable<String>(description);
     map['color_hex'] = Variable<String>(colorHex);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['is_draft'] = Variable<bool>(isDraft);
     map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
     map['sync_status'] = Variable<int>(syncStatus);
     map['is_deleted'] = Variable<bool>(isDeleted);
@@ -970,6 +996,7 @@ class Routine extends DataClass implements Insertable<Routine> {
       description: Value(description),
       colorHex: Value(colorHex),
       createdAt: Value(createdAt),
+      isDraft: Value(isDraft),
       lastModifiedAt: Value(lastModifiedAt),
       syncStatus: Value(syncStatus),
       isDeleted: Value(isDeleted),
@@ -988,6 +1015,7 @@ class Routine extends DataClass implements Insertable<Routine> {
       description: serializer.fromJson<String>(json['description']),
       colorHex: serializer.fromJson<String>(json['colorHex']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      isDraft: serializer.fromJson<bool>(json['isDraft']),
       lastModifiedAt: serializer.fromJson<DateTime>(json['lastModifiedAt']),
       syncStatus: serializer.fromJson<int>(json['syncStatus']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
@@ -1003,6 +1031,7 @@ class Routine extends DataClass implements Insertable<Routine> {
       'description': serializer.toJson<String>(description),
       'colorHex': serializer.toJson<String>(colorHex),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'isDraft': serializer.toJson<bool>(isDraft),
       'lastModifiedAt': serializer.toJson<DateTime>(lastModifiedAt),
       'syncStatus': serializer.toJson<int>(syncStatus),
       'isDeleted': serializer.toJson<bool>(isDeleted),
@@ -1016,6 +1045,7 @@ class Routine extends DataClass implements Insertable<Routine> {
     String? description,
     String? colorHex,
     DateTime? createdAt,
+    bool? isDraft,
     DateTime? lastModifiedAt,
     int? syncStatus,
     bool? isDeleted,
@@ -1026,6 +1056,7 @@ class Routine extends DataClass implements Insertable<Routine> {
     description: description ?? this.description,
     colorHex: colorHex ?? this.colorHex,
     createdAt: createdAt ?? this.createdAt,
+    isDraft: isDraft ?? this.isDraft,
     lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
     syncStatus: syncStatus ?? this.syncStatus,
     isDeleted: isDeleted ?? this.isDeleted,
@@ -1040,6 +1071,7 @@ class Routine extends DataClass implements Insertable<Routine> {
           : this.description,
       colorHex: data.colorHex.present ? data.colorHex.value : this.colorHex,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      isDraft: data.isDraft.present ? data.isDraft.value : this.isDraft,
       lastModifiedAt: data.lastModifiedAt.present
           ? data.lastModifiedAt.value
           : this.lastModifiedAt,
@@ -1059,6 +1091,7 @@ class Routine extends DataClass implements Insertable<Routine> {
           ..write('description: $description, ')
           ..write('colorHex: $colorHex, ')
           ..write('createdAt: $createdAt, ')
+          ..write('isDraft: $isDraft, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -1074,6 +1107,7 @@ class Routine extends DataClass implements Insertable<Routine> {
     description,
     colorHex,
     createdAt,
+    isDraft,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -1088,6 +1122,7 @@ class Routine extends DataClass implements Insertable<Routine> {
           other.description == this.description &&
           other.colorHex == this.colorHex &&
           other.createdAt == this.createdAt &&
+          other.isDraft == this.isDraft &&
           other.lastModifiedAt == this.lastModifiedAt &&
           other.syncStatus == this.syncStatus &&
           other.isDeleted == this.isDeleted);
@@ -1100,6 +1135,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
   final Value<String> description;
   final Value<String> colorHex;
   final Value<DateTime> createdAt;
+  final Value<bool> isDraft;
   final Value<DateTime> lastModifiedAt;
   final Value<int> syncStatus;
   final Value<bool> isDeleted;
@@ -1110,6 +1146,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
     this.description = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.isDraft = const Value.absent(),
     this.lastModifiedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -1121,6 +1158,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
     this.description = const Value.absent(),
     this.colorHex = const Value.absent(),
     required DateTime createdAt,
+    this.isDraft = const Value.absent(),
     required DateTime lastModifiedAt,
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -1135,6 +1173,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
     Expression<String>? description,
     Expression<String>? colorHex,
     Expression<DateTime>? createdAt,
+    Expression<bool>? isDraft,
     Expression<DateTime>? lastModifiedAt,
     Expression<int>? syncStatus,
     Expression<bool>? isDeleted,
@@ -1146,6 +1185,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
       if (description != null) 'description': description,
       if (colorHex != null) 'color_hex': colorHex,
       if (createdAt != null) 'created_at': createdAt,
+      if (isDraft != null) 'is_draft': isDraft,
       if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (isDeleted != null) 'is_deleted': isDeleted,
@@ -1159,6 +1199,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
     Value<String>? description,
     Value<String>? colorHex,
     Value<DateTime>? createdAt,
+    Value<bool>? isDraft,
     Value<DateTime>? lastModifiedAt,
     Value<int>? syncStatus,
     Value<bool>? isDeleted,
@@ -1170,6 +1211,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
       description: description ?? this.description,
       colorHex: colorHex ?? this.colorHex,
       createdAt: createdAt ?? this.createdAt,
+      isDraft: isDraft ?? this.isDraft,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -1197,6 +1239,9 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (isDraft.present) {
+      map['is_draft'] = Variable<bool>(isDraft.value);
+    }
     if (lastModifiedAt.present) {
       map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
     }
@@ -1218,6 +1263,7 @@ class RoutinesCompanion extends UpdateCompanion<Routine> {
           ..write('description: $description, ')
           ..write('colorHex: $colorHex, ')
           ..write('createdAt: $createdAt, ')
+          ..write('isDraft: $isDraft, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -1354,6 +1400,18 @@ class $RoutineExercisesTable extends RoutineExercises
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _useLbsMeta = const VerificationMeta('useLbs');
+  @override
+  late final GeneratedColumn<bool> useLbs = GeneratedColumn<bool>(
+    'use_lbs',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("use_lbs" IN (0, 1))',
+    ),
+  );
   static const VerificationMeta _lastModifiedAtMeta = const VerificationMeta(
     'lastModifiedAt',
   );
@@ -1405,6 +1463,7 @@ class $RoutineExercisesTable extends RoutineExercises
     targetWeight,
     sectionName,
     notes,
+    useLbs,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -1493,6 +1552,12 @@ class $RoutineExercisesTable extends RoutineExercises
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('use_lbs')) {
+      context.handle(
+        _useLbsMeta,
+        useLbs.isAcceptableOrUnknown(data['use_lbs']!, _useLbsMeta),
+      );
+    }
     if (data.containsKey('last_modified_at')) {
       context.handle(
         _lastModifiedAtMeta,
@@ -1565,6 +1630,10 @@ class $RoutineExercisesTable extends RoutineExercises
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       )!,
+      useLbs: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_lbs'],
+      ),
       lastModifiedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_modified_at'],
@@ -1598,6 +1667,7 @@ class RoutineExerciseEntry extends DataClass
   final double targetWeight;
   final String sectionName;
   final String notes;
+  final bool? useLbs;
   final DateTime lastModifiedAt;
   final int syncStatus;
   final bool isDeleted;
@@ -1612,6 +1682,7 @@ class RoutineExerciseEntry extends DataClass
     required this.targetWeight,
     required this.sectionName,
     required this.notes,
+    this.useLbs,
     required this.lastModifiedAt,
     required this.syncStatus,
     required this.isDeleted,
@@ -1629,6 +1700,9 @@ class RoutineExerciseEntry extends DataClass
     map['target_weight'] = Variable<double>(targetWeight);
     map['section_name'] = Variable<String>(sectionName);
     map['notes'] = Variable<String>(notes);
+    if (!nullToAbsent || useLbs != null) {
+      map['use_lbs'] = Variable<bool>(useLbs);
+    }
     map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
     map['sync_status'] = Variable<int>(syncStatus);
     map['is_deleted'] = Variable<bool>(isDeleted);
@@ -1647,6 +1721,9 @@ class RoutineExerciseEntry extends DataClass
       targetWeight: Value(targetWeight),
       sectionName: Value(sectionName),
       notes: Value(notes),
+      useLbs: useLbs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useLbs),
       lastModifiedAt: Value(lastModifiedAt),
       syncStatus: Value(syncStatus),
       isDeleted: Value(isDeleted),
@@ -1669,6 +1746,7 @@ class RoutineExerciseEntry extends DataClass
       targetWeight: serializer.fromJson<double>(json['targetWeight']),
       sectionName: serializer.fromJson<String>(json['sectionName']),
       notes: serializer.fromJson<String>(json['notes']),
+      useLbs: serializer.fromJson<bool?>(json['useLbs']),
       lastModifiedAt: serializer.fromJson<DateTime>(json['lastModifiedAt']),
       syncStatus: serializer.fromJson<int>(json['syncStatus']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
@@ -1688,6 +1766,7 @@ class RoutineExerciseEntry extends DataClass
       'targetWeight': serializer.toJson<double>(targetWeight),
       'sectionName': serializer.toJson<String>(sectionName),
       'notes': serializer.toJson<String>(notes),
+      'useLbs': serializer.toJson<bool?>(useLbs),
       'lastModifiedAt': serializer.toJson<DateTime>(lastModifiedAt),
       'syncStatus': serializer.toJson<int>(syncStatus),
       'isDeleted': serializer.toJson<bool>(isDeleted),
@@ -1705,6 +1784,7 @@ class RoutineExerciseEntry extends DataClass
     double? targetWeight,
     String? sectionName,
     String? notes,
+    Value<bool?> useLbs = const Value.absent(),
     DateTime? lastModifiedAt,
     int? syncStatus,
     bool? isDeleted,
@@ -1719,6 +1799,7 @@ class RoutineExerciseEntry extends DataClass
     targetWeight: targetWeight ?? this.targetWeight,
     sectionName: sectionName ?? this.sectionName,
     notes: notes ?? this.notes,
+    useLbs: useLbs.present ? useLbs.value : this.useLbs,
     lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
     syncStatus: syncStatus ?? this.syncStatus,
     isDeleted: isDeleted ?? this.isDeleted,
@@ -1747,6 +1828,7 @@ class RoutineExerciseEntry extends DataClass
           ? data.sectionName.value
           : this.sectionName,
       notes: data.notes.present ? data.notes.value : this.notes,
+      useLbs: data.useLbs.present ? data.useLbs.value : this.useLbs,
       lastModifiedAt: data.lastModifiedAt.present
           ? data.lastModifiedAt.value
           : this.lastModifiedAt,
@@ -1770,6 +1852,7 @@ class RoutineExerciseEntry extends DataClass
           ..write('targetWeight: $targetWeight, ')
           ..write('sectionName: $sectionName, ')
           ..write('notes: $notes, ')
+          ..write('useLbs: $useLbs, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -1789,6 +1872,7 @@ class RoutineExerciseEntry extends DataClass
     targetWeight,
     sectionName,
     notes,
+    useLbs,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -1807,6 +1891,7 @@ class RoutineExerciseEntry extends DataClass
           other.targetWeight == this.targetWeight &&
           other.sectionName == this.sectionName &&
           other.notes == this.notes &&
+          other.useLbs == this.useLbs &&
           other.lastModifiedAt == this.lastModifiedAt &&
           other.syncStatus == this.syncStatus &&
           other.isDeleted == this.isDeleted);
@@ -1823,6 +1908,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
   final Value<double> targetWeight;
   final Value<String> sectionName;
   final Value<String> notes;
+  final Value<bool?> useLbs;
   final Value<DateTime> lastModifiedAt;
   final Value<int> syncStatus;
   final Value<bool> isDeleted;
@@ -1837,6 +1923,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     this.targetWeight = const Value.absent(),
     this.sectionName = const Value.absent(),
     this.notes = const Value.absent(),
+    this.useLbs = const Value.absent(),
     this.lastModifiedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -1852,6 +1939,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     this.targetWeight = const Value.absent(),
     this.sectionName = const Value.absent(),
     this.notes = const Value.absent(),
+    this.useLbs = const Value.absent(),
     required DateTime lastModifiedAt,
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -1870,6 +1958,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     Expression<double>? targetWeight,
     Expression<String>? sectionName,
     Expression<String>? notes,
+    Expression<bool>? useLbs,
     Expression<DateTime>? lastModifiedAt,
     Expression<int>? syncStatus,
     Expression<bool>? isDeleted,
@@ -1885,6 +1974,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
       if (targetWeight != null) 'target_weight': targetWeight,
       if (sectionName != null) 'section_name': sectionName,
       if (notes != null) 'notes': notes,
+      if (useLbs != null) 'use_lbs': useLbs,
       if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (isDeleted != null) 'is_deleted': isDeleted,
@@ -1902,6 +1992,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     Value<double>? targetWeight,
     Value<String>? sectionName,
     Value<String>? notes,
+    Value<bool?>? useLbs,
     Value<DateTime>? lastModifiedAt,
     Value<int>? syncStatus,
     Value<bool>? isDeleted,
@@ -1917,6 +2008,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
       targetWeight: targetWeight ?? this.targetWeight,
       sectionName: sectionName ?? this.sectionName,
       notes: notes ?? this.notes,
+      useLbs: useLbs ?? this.useLbs,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -1956,6 +2048,9 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (useLbs.present) {
+      map['use_lbs'] = Variable<bool>(useLbs.value);
+    }
     if (lastModifiedAt.present) {
       map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
     }
@@ -1981,6 +2076,7 @@ class RoutineExercisesCompanion extends UpdateCompanion<RoutineExerciseEntry> {
           ..write('targetWeight: $targetWeight, ')
           ..write('sectionName: $sectionName, ')
           ..write('notes: $notes, ')
+          ..write('useLbs: $useLbs, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -2623,6 +2719,18 @@ class $WorkoutExercisesTable extends WorkoutExercises
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _useLbsMeta = const VerificationMeta('useLbs');
+  @override
+  late final GeneratedColumn<bool> useLbs = GeneratedColumn<bool>(
+    'use_lbs',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("use_lbs" IN (0, 1))',
+    ),
+  );
   static const VerificationMeta _lastModifiedAtMeta = const VerificationMeta(
     'lastModifiedAt',
   );
@@ -2670,6 +2778,7 @@ class $WorkoutExercisesTable extends WorkoutExercises
     exerciseId,
     displayOrder,
     notes,
+    useLbs,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -2728,6 +2837,12 @@ class $WorkoutExercisesTable extends WorkoutExercises
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('use_lbs')) {
+      context.handle(
+        _useLbsMeta,
+        useLbs.isAcceptableOrUnknown(data['use_lbs']!, _useLbsMeta),
+      );
+    }
     if (data.containsKey('last_modified_at')) {
       context.handle(
         _lastModifiedAtMeta,
@@ -2784,6 +2899,10 @@ class $WorkoutExercisesTable extends WorkoutExercises
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       )!,
+      useLbs: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_lbs'],
+      ),
       lastModifiedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_modified_at'],
@@ -2813,6 +2932,7 @@ class WorkoutExerciseEntry extends DataClass
   final int exerciseId;
   final int displayOrder;
   final String notes;
+  final bool? useLbs;
   final DateTime lastModifiedAt;
   final int syncStatus;
   final bool isDeleted;
@@ -2823,6 +2943,7 @@ class WorkoutExerciseEntry extends DataClass
     required this.exerciseId,
     required this.displayOrder,
     required this.notes,
+    this.useLbs,
     required this.lastModifiedAt,
     required this.syncStatus,
     required this.isDeleted,
@@ -2836,6 +2957,9 @@ class WorkoutExerciseEntry extends DataClass
     map['exercise_id'] = Variable<int>(exerciseId);
     map['display_order'] = Variable<int>(displayOrder);
     map['notes'] = Variable<String>(notes);
+    if (!nullToAbsent || useLbs != null) {
+      map['use_lbs'] = Variable<bool>(useLbs);
+    }
     map['last_modified_at'] = Variable<DateTime>(lastModifiedAt);
     map['sync_status'] = Variable<int>(syncStatus);
     map['is_deleted'] = Variable<bool>(isDeleted);
@@ -2850,6 +2974,9 @@ class WorkoutExerciseEntry extends DataClass
       exerciseId: Value(exerciseId),
       displayOrder: Value(displayOrder),
       notes: Value(notes),
+      useLbs: useLbs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useLbs),
       lastModifiedAt: Value(lastModifiedAt),
       syncStatus: Value(syncStatus),
       isDeleted: Value(isDeleted),
@@ -2868,6 +2995,7 @@ class WorkoutExerciseEntry extends DataClass
       exerciseId: serializer.fromJson<int>(json['exerciseId']),
       displayOrder: serializer.fromJson<int>(json['displayOrder']),
       notes: serializer.fromJson<String>(json['notes']),
+      useLbs: serializer.fromJson<bool?>(json['useLbs']),
       lastModifiedAt: serializer.fromJson<DateTime>(json['lastModifiedAt']),
       syncStatus: serializer.fromJson<int>(json['syncStatus']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
@@ -2883,6 +3011,7 @@ class WorkoutExerciseEntry extends DataClass
       'exerciseId': serializer.toJson<int>(exerciseId),
       'displayOrder': serializer.toJson<int>(displayOrder),
       'notes': serializer.toJson<String>(notes),
+      'useLbs': serializer.toJson<bool?>(useLbs),
       'lastModifiedAt': serializer.toJson<DateTime>(lastModifiedAt),
       'syncStatus': serializer.toJson<int>(syncStatus),
       'isDeleted': serializer.toJson<bool>(isDeleted),
@@ -2896,6 +3025,7 @@ class WorkoutExerciseEntry extends DataClass
     int? exerciseId,
     int? displayOrder,
     String? notes,
+    Value<bool?> useLbs = const Value.absent(),
     DateTime? lastModifiedAt,
     int? syncStatus,
     bool? isDeleted,
@@ -2906,6 +3036,7 @@ class WorkoutExerciseEntry extends DataClass
     exerciseId: exerciseId ?? this.exerciseId,
     displayOrder: displayOrder ?? this.displayOrder,
     notes: notes ?? this.notes,
+    useLbs: useLbs.present ? useLbs.value : this.useLbs,
     lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
     syncStatus: syncStatus ?? this.syncStatus,
     isDeleted: isDeleted ?? this.isDeleted,
@@ -2922,6 +3053,7 @@ class WorkoutExerciseEntry extends DataClass
           ? data.displayOrder.value
           : this.displayOrder,
       notes: data.notes.present ? data.notes.value : this.notes,
+      useLbs: data.useLbs.present ? data.useLbs.value : this.useLbs,
       lastModifiedAt: data.lastModifiedAt.present
           ? data.lastModifiedAt.value
           : this.lastModifiedAt,
@@ -2941,6 +3073,7 @@ class WorkoutExerciseEntry extends DataClass
           ..write('exerciseId: $exerciseId, ')
           ..write('displayOrder: $displayOrder, ')
           ..write('notes: $notes, ')
+          ..write('useLbs: $useLbs, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -2956,6 +3089,7 @@ class WorkoutExerciseEntry extends DataClass
     exerciseId,
     displayOrder,
     notes,
+    useLbs,
     lastModifiedAt,
     syncStatus,
     isDeleted,
@@ -2970,6 +3104,7 @@ class WorkoutExerciseEntry extends DataClass
           other.exerciseId == this.exerciseId &&
           other.displayOrder == this.displayOrder &&
           other.notes == this.notes &&
+          other.useLbs == this.useLbs &&
           other.lastModifiedAt == this.lastModifiedAt &&
           other.syncStatus == this.syncStatus &&
           other.isDeleted == this.isDeleted);
@@ -2982,6 +3117,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
   final Value<int> exerciseId;
   final Value<int> displayOrder;
   final Value<String> notes;
+  final Value<bool?> useLbs;
   final Value<DateTime> lastModifiedAt;
   final Value<int> syncStatus;
   final Value<bool> isDeleted;
@@ -2992,6 +3128,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
     this.exerciseId = const Value.absent(),
     this.displayOrder = const Value.absent(),
     this.notes = const Value.absent(),
+    this.useLbs = const Value.absent(),
     this.lastModifiedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -3003,6 +3140,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
     required int exerciseId,
     this.displayOrder = const Value.absent(),
     this.notes = const Value.absent(),
+    this.useLbs = const Value.absent(),
     required DateTime lastModifiedAt,
     this.syncStatus = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -3017,6 +3155,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
     Expression<int>? exerciseId,
     Expression<int>? displayOrder,
     Expression<String>? notes,
+    Expression<bool>? useLbs,
     Expression<DateTime>? lastModifiedAt,
     Expression<int>? syncStatus,
     Expression<bool>? isDeleted,
@@ -3028,6 +3167,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
       if (exerciseId != null) 'exercise_id': exerciseId,
       if (displayOrder != null) 'display_order': displayOrder,
       if (notes != null) 'notes': notes,
+      if (useLbs != null) 'use_lbs': useLbs,
       if (lastModifiedAt != null) 'last_modified_at': lastModifiedAt,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (isDeleted != null) 'is_deleted': isDeleted,
@@ -3041,6 +3181,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
     Value<int>? exerciseId,
     Value<int>? displayOrder,
     Value<String>? notes,
+    Value<bool?>? useLbs,
     Value<DateTime>? lastModifiedAt,
     Value<int>? syncStatus,
     Value<bool>? isDeleted,
@@ -3052,6 +3193,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
       exerciseId: exerciseId ?? this.exerciseId,
       displayOrder: displayOrder ?? this.displayOrder,
       notes: notes ?? this.notes,
+      useLbs: useLbs ?? this.useLbs,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -3079,6 +3221,9 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (useLbs.present) {
+      map['use_lbs'] = Variable<bool>(useLbs.value);
+    }
     if (lastModifiedAt.present) {
       map['last_modified_at'] = Variable<DateTime>(lastModifiedAt.value);
     }
@@ -3100,6 +3245,7 @@ class WorkoutExercisesCompanion extends UpdateCompanion<WorkoutExerciseEntry> {
           ..write('exerciseId: $exerciseId, ')
           ..write('displayOrder: $displayOrder, ')
           ..write('notes: $notes, ')
+          ..write('useLbs: $useLbs, ')
           ..write('lastModifiedAt: $lastModifiedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('isDeleted: $isDeleted')
@@ -4568,6 +4714,7 @@ typedef $$RoutinesTableCreateCompanionBuilder =
       Value<String> description,
       Value<String> colorHex,
       required DateTime createdAt,
+      Value<bool> isDraft,
       required DateTime lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -4580,6 +4727,7 @@ typedef $$RoutinesTableUpdateCompanionBuilder =
       Value<String> description,
       Value<String> colorHex,
       Value<DateTime> createdAt,
+      Value<bool> isDraft,
       Value<DateTime> lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -4649,6 +4797,11 @@ class $$RoutinesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDraft => $composableBuilder(
+    column: $table.isDraft,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4732,6 +4885,11 @@ class $$RoutinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isDraft => $composableBuilder(
+    column: $table.isDraft,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
     column: $table.lastModifiedAt,
     builder: (column) => ColumnOrderings(column),
@@ -4776,6 +4934,9 @@ class $$RoutinesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDraft =>
+      $composableBuilder(column: $table.isDraft, builder: (column) => column);
 
   GeneratedColumn<DateTime> get lastModifiedAt => $composableBuilder(
     column: $table.lastModifiedAt,
@@ -4850,6 +5011,7 @@ class $$RoutinesTableTableManager
                 Value<String> description = const Value.absent(),
                 Value<String> colorHex = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> isDraft = const Value.absent(),
                 Value<DateTime> lastModifiedAt = const Value.absent(),
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -4860,6 +5022,7 @@ class $$RoutinesTableTableManager
                 description: description,
                 colorHex: colorHex,
                 createdAt: createdAt,
+                isDraft: isDraft,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,
@@ -4872,6 +5035,7 @@ class $$RoutinesTableTableManager
                 Value<String> description = const Value.absent(),
                 Value<String> colorHex = const Value.absent(),
                 required DateTime createdAt,
+                Value<bool> isDraft = const Value.absent(),
                 required DateTime lastModifiedAt,
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -4882,6 +5046,7 @@ class $$RoutinesTableTableManager
                 description: description,
                 colorHex: colorHex,
                 createdAt: createdAt,
+                isDraft: isDraft,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,
@@ -4955,6 +5120,7 @@ typedef $$RoutineExercisesTableCreateCompanionBuilder =
       Value<double> targetWeight,
       Value<String> sectionName,
       Value<String> notes,
+      Value<bool?> useLbs,
       required DateTime lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -4971,6 +5137,7 @@ typedef $$RoutineExercisesTableUpdateCompanionBuilder =
       Value<double> targetWeight,
       Value<String> sectionName,
       Value<String> notes,
+      Value<bool?> useLbs,
       Value<DateTime> lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -5074,6 +5241,11 @@ class $$RoutineExercisesTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get useLbs => $composableBuilder(
+    column: $table.useLbs,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5188,6 +5360,11 @@ class $$RoutineExercisesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get useLbs => $composableBuilder(
+    column: $table.useLbs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
     column: $table.lastModifiedAt,
     builder: (column) => ColumnOrderings(column),
@@ -5293,6 +5470,9 @@ class $$RoutineExercisesTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<bool> get useLbs =>
+      $composableBuilder(column: $table.useLbs, builder: (column) => column);
+
   GeneratedColumn<DateTime> get lastModifiedAt => $composableBuilder(
     column: $table.lastModifiedAt,
     builder: (column) => column,
@@ -5393,6 +5573,7 @@ class $$RoutineExercisesTableTableManager
                 Value<double> targetWeight = const Value.absent(),
                 Value<String> sectionName = const Value.absent(),
                 Value<String> notes = const Value.absent(),
+                Value<bool?> useLbs = const Value.absent(),
                 Value<DateTime> lastModifiedAt = const Value.absent(),
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -5407,6 +5588,7 @@ class $$RoutineExercisesTableTableManager
                 targetWeight: targetWeight,
                 sectionName: sectionName,
                 notes: notes,
+                useLbs: useLbs,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,
@@ -5423,6 +5605,7 @@ class $$RoutineExercisesTableTableManager
                 Value<double> targetWeight = const Value.absent(),
                 Value<String> sectionName = const Value.absent(),
                 Value<String> notes = const Value.absent(),
+                Value<bool?> useLbs = const Value.absent(),
                 required DateTime lastModifiedAt,
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -5437,6 +5620,7 @@ class $$RoutineExercisesTableTableManager
                 targetWeight: targetWeight,
                 sectionName: sectionName,
                 notes: notes,
+                useLbs: useLbs,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,
@@ -6011,6 +6195,7 @@ typedef $$WorkoutExercisesTableCreateCompanionBuilder =
       required int exerciseId,
       Value<int> displayOrder,
       Value<String> notes,
+      Value<bool?> useLbs,
       required DateTime lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -6023,6 +6208,7 @@ typedef $$WorkoutExercisesTableUpdateCompanionBuilder =
       Value<int> exerciseId,
       Value<int> displayOrder,
       Value<String> notes,
+      Value<bool?> useLbs,
       Value<DateTime> lastModifiedAt,
       Value<int> syncStatus,
       Value<bool> isDeleted,
@@ -6106,6 +6292,11 @@ class $$WorkoutExercisesTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get useLbs => $composableBuilder(
+    column: $table.useLbs,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6200,6 +6391,11 @@ class $$WorkoutExercisesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get useLbs => $composableBuilder(
+    column: $table.useLbs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get lastModifiedAt => $composableBuilder(
     column: $table.lastModifiedAt,
     builder: (column) => ColumnOrderings(column),
@@ -6284,6 +6480,9 @@ class $$WorkoutExercisesTableAnnotationComposer
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<bool> get useLbs =>
+      $composableBuilder(column: $table.useLbs, builder: (column) => column);
 
   GeneratedColumn<DateTime> get lastModifiedAt => $composableBuilder(
     column: $table.lastModifiedAt,
@@ -6381,6 +6580,7 @@ class $$WorkoutExercisesTableTableManager
                 Value<int> exerciseId = const Value.absent(),
                 Value<int> displayOrder = const Value.absent(),
                 Value<String> notes = const Value.absent(),
+                Value<bool?> useLbs = const Value.absent(),
                 Value<DateTime> lastModifiedAt = const Value.absent(),
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -6391,6 +6591,7 @@ class $$WorkoutExercisesTableTableManager
                 exerciseId: exerciseId,
                 displayOrder: displayOrder,
                 notes: notes,
+                useLbs: useLbs,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,
@@ -6403,6 +6604,7 @@ class $$WorkoutExercisesTableTableManager
                 required int exerciseId,
                 Value<int> displayOrder = const Value.absent(),
                 Value<String> notes = const Value.absent(),
+                Value<bool?> useLbs = const Value.absent(),
                 required DateTime lastModifiedAt,
                 Value<int> syncStatus = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -6413,6 +6615,7 @@ class $$WorkoutExercisesTableTableManager
                 exerciseId: exerciseId,
                 displayOrder: displayOrder,
                 notes: notes,
+                useLbs: useLbs,
                 lastModifiedAt: lastModifiedAt,
                 syncStatus: syncStatus,
                 isDeleted: isDeleted,

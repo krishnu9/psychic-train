@@ -92,10 +92,14 @@ class Exercises extends Table {
 class Routines extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get clientId => text()();
-  TextColumn get name => text().withLength(min: 1, max: 100)();
+  TextColumn get name => text().withLength(max: 100)();
   TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get colorHex => text().withDefault(const Constant('FF6366F1'))();
   DateTimeColumn get createdAt => dateTime()();
+
+  // Draft state — true while user is still building the routine in the editor.
+  // Drafts are excluded from the main routines list and from remote sync.
+  BoolColumn get isDraft => boolean().withDefault(const Constant(false))();
 
   // Sync-ready columns
   DateTimeColumn get lastModifiedAt => dateTime()();
@@ -115,6 +119,9 @@ class RoutineExercises extends Table {
   RealColumn get targetWeight => real().withDefault(const Constant(0.0))();
   TextColumn get sectionName => text().withDefault(const Constant(''))();
   TextColumn get notes => text().withDefault(const Constant(''))();
+
+  // Unit override: null = follow global toggle, true = lbs, false = kg.
+  BoolColumn get useLbs => boolean().nullable()();
 
   // Sync-ready columns
   DateTimeColumn get lastModifiedAt => dateTime()();
@@ -145,6 +152,9 @@ class WorkoutExercises extends Table {
   IntColumn get exerciseId => integer().references(Exercises, #id)();
   IntColumn get displayOrder => integer().withDefault(const Constant(0))();
   TextColumn get notes => text().withDefault(const Constant(''))();
+
+  // Unit override: null = follow routine/global, true = lbs, false = kg.
+  BoolColumn get useLbs => boolean().nullable()();
 
   // Sync-ready columns
   DateTimeColumn get lastModifiedAt => dateTime()();

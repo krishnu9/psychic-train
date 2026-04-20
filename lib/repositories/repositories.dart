@@ -4,6 +4,10 @@ import '../database/app_database.dart';
 import '../services/sync_service.dart';
 import '../services/notification_service.dart';
 
+// Sentinel used to distinguish "argument not passed" from "explicitly null"
+// for nullable tri-state parameters (e.g. useLbs: true/false/null).
+const Object _unset = Object();
+
 /// Repository abstraction for exercises.
 /// Providers talk to this – never directly to the database.
 /// When cloud sync is added, this class gains a remote data source
@@ -63,6 +67,8 @@ class RoutineRepository {
   Future<List<Routine>> getAll() => _db.getAllRoutines();
   Stream<List<Routine>> watchAll() => _db.watchAllRoutines();
   Future<Routine?> getById(int id) => _db.getRoutineById(id);
+  Future<Routine?> getDraft() => _db.getDraftRoutine();
+  Stream<Routine?> watchDraft() => _db.watchDraftRoutine();
 
   Future<int> create({
     required String name,
@@ -81,6 +87,42 @@ class RoutineRepository {
     return id;
   }
 
+  /// Returns the existing draft routine's ID, or creates a new draft and
+  /// returns its ID. Drafts are stored locally only and not pushed to sync
+  /// until committed via [commitDraft].
+  Future<int> getOrCreateDraft() async {
+    final existing = await getDraft();
+    if (existing != null) return existing.id;
+    return _db.insertRoutine(const RoutinesCompanion(
+      name: Value(''),
+      isDraft: Value(true),
+    ));
+  }
+
+  /// Mark the draft as a real routine: clears the draft flag, bumps
+  /// sync status so it (and its exercises) push on the next sync pass.
+  Future<void> commitDraft(int id) async {
+    await _db.updateRoutine(RoutinesCompanion(
+      id: Value(id),
+      isDraft: const Value(false),
+    ));
+    // Mark all of the routine's exercises pending so they sync too.
+    final entries = await getExercises(id);
+    final r = await getById(id);
+    if (r != null) {
+      if (await _sync.pushRoutine(r)) await _db.markSynced('routines', id);
+    }
+    for (final e in entries) {
+      if (await _sync.pushRoutineExercise(e)) {
+        await _db.markSynced('routine_exercises', e.id);
+      }
+    }
+  }
+
+  /// Hard-clear the draft (soft-delete + cascade to its exercises). Not pushed
+  /// to sync because drafts were never pushed in the first place.
+  Future<void> discardDraft(int id) => _db.softDeleteRoutine(id);
+
   Future<bool> update(int id, {String? name, String? description, String? colorHex}) async {
     final ok = await _db.updateRoutine(RoutinesCompanion(
       id: Value(id),
@@ -90,7 +132,8 @@ class RoutineRepository {
     ));
     if (ok) {
       final r = await getById(id);
-      if (r != null) {
+      // Drafts stay local until committed — don't push in-progress state to sync.
+      if (r != null && !r.isDraft) {
         if (await _sync.pushRoutine(r)) await _db.markSynced('routines', id);
       }
     }
@@ -125,7 +168,12 @@ class RoutineRepository {
       _db.watchRoutineExercises(routineId);
 
   Future<int> addExercise(int routineId, int exerciseId, int order,
-          {int sets = 3, int reps = 10, double weight = 0, String sectionName = '', String notes = ''}) async {
+          {int sets = 3,
+          int reps = 10,
+          double weight = 0,
+          String sectionName = '',
+          String notes = '',
+          bool? useLbs}) async {
     final id = await _db.insertRoutineExercise(RoutineExercisesCompanion(
       routineId: Value(routineId),
       exerciseId: Value(exerciseId),
@@ -135,22 +183,37 @@ class RoutineRepository {
       targetWeight: Value(weight),
       sectionName: Value(sectionName),
       notes: Value(notes),
+      useLbs: Value(useLbs),
     ));
     // Defer push to background sync to keep UI fast
     return id;
   }
 
   Future<void> updateExercise(int id,
-          {int? sets, int? reps, double? weight, String? sectionName, String? notes}) async {
+      {int? sets,
+      int? reps,
+      double? weight,
+      String? sectionName,
+      String? notes,
+      Object? useLbs = _unset}) async {
     await _db.updateRoutineExercise(RoutineExercisesCompanion(
       id: Value(id),
       targetSets: sets != null ? Value(sets) : const Value.absent(),
       targetReps: reps != null ? Value(reps) : const Value.absent(),
       targetWeight: weight != null ? Value(weight) : const Value.absent(),
-      sectionName: sectionName != null ? Value(sectionName) : const Value.absent(),
+      sectionName:
+          sectionName != null ? Value(sectionName) : const Value.absent(),
       notes: notes != null ? Value(notes) : const Value.absent(),
+      useLbs: identical(useLbs, _unset)
+          ? const Value.absent()
+          : Value(useLbs as bool?),
     ));
   }
+
+  /// Convenience for toggling the per-exercise unit override from the UI.
+  /// Pass `null` to clear the override (falls back to global).
+  Future<void> setExerciseUseLbs(int id, bool? useLbs) =>
+      updateExercise(id, useLbs: useLbs);
 
   Future<void> removeExercise(int id) => _db.softDeleteRoutineExercise(id);
   Future<void> reorderExercises(int routineId, List<int> orderedIds) =>
@@ -182,12 +245,14 @@ class WorkoutRepository {
     required int exerciseId,
     int displayOrder = 0,
     String notes = '',
+    bool? useLbs,
   }) =>
       _db.upsertWorkoutExercise(WorkoutExercisesCompanion(
         workoutId: Value(workoutId),
         exerciseId: Value(exerciseId),
         displayOrder: Value(displayOrder),
         notes: Value(notes),
+        useLbs: Value(useLbs),
       ));
 
   Future<void> appendWorkoutExercise({
@@ -205,6 +270,11 @@ class WorkoutRepository {
 
   Future<void> updateWorkoutExerciseNotes(int id, String notes) =>
       _db.updateWorkoutExerciseNotes(id, notes);
+
+  /// Set (or clear) the per-exercise unit override on an in-progress workout.
+  /// `useLbs` == null clears the override (falls back to routine/global).
+  Future<void> setWorkoutExerciseUseLbs(int id, bool? useLbs) =>
+      _db.updateWorkoutExerciseUseLbs(id, useLbs);
 
   Future<void> removeWorkoutExercise(int id) =>
       _db.softDeleteWorkoutExercise(id);
@@ -232,6 +302,7 @@ class WorkoutRepository {
           exerciseId: re.exerciseId,
           displayOrder: re.displayOrder,
           notes: re.notes,
+          useLbs: re.useLbs,
         );
       }
     }

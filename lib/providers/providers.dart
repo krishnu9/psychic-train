@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../database/app_database.dart';
@@ -7,6 +8,13 @@ import '../repositories/repositories.dart';
 import '../services/sync_service.dart';
 import '../services/supabase_service.dart';
 import '../services/notification_service.dart';
+
+// Overridden in `main.dart` at app startup with the real SharedPreferences
+// instance. Tests that exercise code reading this provider must override it too.
+final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+  throw UnimplementedError(
+      'sharedPreferencesProvider must be overridden in ProviderScope.');
+});
 
 
 // ─── Database ────────────────────────────────────────────────────────────────
@@ -67,6 +75,12 @@ final routinesProvider = StreamProvider<List<Routine>>((ref) {
 final routineExercisesProvider =
     StreamProvider.family<List<RoutineExerciseEntry>, int>((ref, routineId) {
   return ref.watch(routineRepositoryProvider).watchExercises(routineId);
+});
+
+/// Stream of the currently in-progress routine draft (null if none).
+/// Used to auto-resume routine creation after app restart.
+final routineDraftProvider = StreamProvider<Routine?>((ref) {
+  return ref.watch(routineRepositoryProvider).watchDraft();
 });
 
 // ─── Workout providers ───────────────────────────────────────────────────────
@@ -147,8 +161,26 @@ final workoutMinimizedProvider = StateProvider<bool>((ref) => false);
 /// Default rest timer duration in seconds
 final restTimerDurationProvider = StateProvider<int>((ref) => 90);
 
-/// Weight unit preference (false = kg, true = lbs)
-final useLbsProvider = StateProvider<bool>((ref) => false);
+/// Global weight unit preference (false = kg, true = lbs).
+/// Persisted to SharedPreferences. Individual exercises can override via
+/// `RoutineExercises.useLbs` / `WorkoutExercises.useLbs`.
+class UseLbsNotifier extends Notifier<bool> {
+  static const _key = 'use_lbs';
+
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getBool(_key) ?? false;
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    await ref.read(sharedPreferencesProvider).setBool(_key, value);
+  }
+}
+
+final useLbsProvider =
+    NotifierProvider<UseLbsNotifier, bool>(UseLbsNotifier.new);
 
 // ─── Auth providers ──────────────────────────────────────────────────────────
 

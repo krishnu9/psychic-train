@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
 import '../../database/app_database.dart';
 import '../../utils/formatters.dart';
+import '../../utils/weight_conversions.dart';
 import '../exercises/exercise_picker.dart';
 
 /// The "Gym Mode" – active workout logging screen.
@@ -147,6 +148,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         sectionName: re.sectionName,
         workoutExerciseId: we?.id,
         notes: we?.notes ?? '',
+        useLbsOverride: we?.useLbs ?? re.useLbs,
       ));
     }
 
@@ -171,6 +173,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         lastSets: lastSets,
         workoutExerciseId: we?.id,
         notes: we?.notes ?? '',
+        useLbsOverride: we?.useLbs,
       ));
     }
 
@@ -216,6 +219,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         lastSets: lastSets,
         workoutExerciseId: we?.id,
         notes: we?.notes ?? '',
+        useLbsOverride: we?.useLbs,
       ));
     }
 
@@ -265,6 +269,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           sectionName: re.sectionName,
           workoutExerciseId: we?.id,
           notes: we?.notes ?? '',
+          useLbsOverride: we?.useLbs ?? re.useLbs,
         ));
       }
 
@@ -360,6 +365,17 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           weight: setData.weight,
           reps: setData.reps,
         );
+  }
+
+  Future<void> _toggleExerciseUnit(int exerciseIndex, bool useLbs) async {
+    final data = _exerciseDataList[exerciseIndex];
+    final weId = data.workoutExerciseId;
+    setState(() => data.useLbsOverride = useLbs);
+    if (weId != null) {
+      await ref
+          .read(workoutRepositoryProvider)
+          .setWorkoutExerciseUseLbs(weId, useLbs);
+    }
   }
 
   void _addSetToExercise(int exerciseIndex) {
@@ -488,7 +504,10 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
             _SummaryRow(label: 'Total Sets', value: '$totalSets'),
             _SummaryRow(
               label: 'Total Volume',
-              value: Formatters.volume(totalVolume),
+              value: Formatters.volume(
+                totalVolume,
+                useLbs: ref.read(useLbsProvider),
+              ),
             ),
             _SummaryRow(
               label: 'Exercises',
@@ -621,11 +640,17 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                             _ExerciseCard(
                                               data: data,
                                               exerciseIndex: index,
-                                              useLbs: useLbs,
+                                              useLbs: resolveUseLbs(
+                                                workoutExercise:
+                                                    data.useLbsOverride,
+                                                global: useLbs,
+                                              ),
                                               onCompleteSet: _completeSet,
                                               onUncompleteSet: _uncompleteSet,
                                               onUpdateSet: _updateSet,
                                               onAddSet: _addSetToExercise,
+                                              onToggleUnit: (v) =>
+                                                  _toggleExerciseUnit(index, v),
                                               onNotesChanged: (weId, notes) {
                                                 data.notes = notes;
                                                 ref
@@ -687,6 +712,8 @@ class _WorkoutExerciseData {
   final String sectionName;
   final int? workoutExerciseId;
   String notes;
+  // Per-exercise unit override: null = follow global toggle, true = lbs, false = kg.
+  bool? useLbsOverride;
 
   _WorkoutExerciseData({
     required this.exercise,
@@ -695,11 +722,13 @@ class _WorkoutExerciseData {
     this.sectionName = '',
     this.workoutExerciseId,
     this.notes = '',
+    this.useLbsOverride,
   });
 }
 
 class _SetData {
   int setNumber;
+  // Always stored in kg (canonical). Display conversion happens in the UI.
   double weight;
   int reps;
   int setType;
@@ -812,6 +841,7 @@ class _ExerciseCard extends StatefulWidget {
   final Future<void> Function(int, int) onUncompleteSet;
   final Future<void> Function(int, int) onUpdateSet;
   final void Function(int) onAddSet;
+  final ValueChanged<bool> onToggleUnit;
   final void Function(int weId, String notes)? onNotesChanged;
   final VoidCallback onRemove;
 
@@ -823,6 +853,7 @@ class _ExerciseCard extends StatefulWidget {
     required this.onUncompleteSet,
     required this.onUpdateSet,
     required this.onAddSet,
+    required this.onToggleUnit,
     this.onNotesChanged,
     required this.onRemove,
   });
@@ -883,7 +914,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            'Last: ${data.lastSets.map((s) => '${s.weight}×${s.reps}').join(', ')}',
+                            'Last: ${data.lastSets.map((s) => '${_displayWeight(s.weight, useLbs)}×${s.reps}').join(', ')}',
                             style: const TextStyle(
                               color: AppColors.textMuted,
                               fontSize: 11,
@@ -892,6 +923,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                         ),
                     ],
                   ),
+                ),
+                _UnitToggle(
+                  useLbs: useLbs,
+                  onChanged: widget.onToggleUnit,
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded,
@@ -935,14 +970,18 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           ),
 
           // Column headers
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                SizedBox(width: 36, child: Text('SET', style: _headerStyle)),
-                Expanded(child: Text('KG', style: _headerStyle, textAlign: TextAlign.center)),
-                Expanded(child: Text('REPS', style: _headerStyle, textAlign: TextAlign.center)),
-                SizedBox(width: 52),
+                const SizedBox(width: 36, child: Text('SET', style: _headerStyle)),
+                Expanded(
+                    child: Text(useLbs ? 'LBS' : 'KG',
+                        style: _headerStyle, textAlign: TextAlign.center)),
+                const Expanded(
+                    child: Text('REPS',
+                        style: _headerStyle, textAlign: TextAlign.center)),
+                const SizedBox(width: 52),
               ],
             ),
           ),
@@ -1004,6 +1043,42 @@ const _headerStyle = TextStyle(
   letterSpacing: 0.5,
 );
 
+String _displayWeight(double kg, bool useLbs) {
+  final v = useLbs ? kgToLbs(kg) : kg;
+  if (v == v.roundToDouble()) return v.toInt().toString();
+  return v.toStringAsFixed(1);
+}
+
+class _UnitToggle extends StatelessWidget {
+  final bool useLbs;
+  final ValueChanged<bool> onChanged;
+
+  const _UnitToggle({required this.useLbs, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!useLbs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          useLbs ? 'LBS' : 'KG',
+          style: const TextStyle(
+            color: AppColors.primary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SetRow extends StatefulWidget {
   final _SetData setData;
   final bool useLbs;
@@ -1034,16 +1109,31 @@ class _SetRowState extends State<_SetRow> {
   @override
   void initState() {
     super.initState();
-    _weightCtrl = TextEditingController(
-      text: widget.setData.weight > 0
-          ? widget.setData.weight.toString()
-          : '',
-    );
+    _weightCtrl =
+        TextEditingController(text: _formatWeight(widget.setData.weight));
     _repsCtrl = TextEditingController(
       text: widget.setData.reps > 0
           ? widget.setData.reps.toString()
           : '',
     );
+  }
+
+  @override
+  void didUpdateWidget(_SetRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // When the unit flips, re-render the field with the converted value. We
+    // only repopulate on unit change (not on every rebuild) so we don't clobber
+    // what the user is currently typing.
+    if (oldWidget.useLbs != widget.useLbs) {
+      _weightCtrl.text = _formatWeight(widget.setData.weight);
+    }
+  }
+
+  String _formatWeight(double kg) {
+    if (kg <= 0) return '';
+    final display = widget.useLbs ? kgToLbs(kg) : kg;
+    if (display == display.roundToDouble()) return display.toInt().toString();
+    return display.toStringAsFixed(1);
   }
 
   @override
@@ -1109,7 +1199,9 @@ class _SetRowState extends State<_SetRow> {
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                 ),
                 onChanged: (v) {
-                  widget.onWeightChanged(double.tryParse(v) ?? 0);
+                  final typed = double.tryParse(v) ?? 0;
+                  final kg = widget.useLbs ? lbsToKg(typed) : typed;
+                  widget.onWeightChanged(kg);
                   if (isCompleted) widget.onUpdateSet();
                 },
               ),

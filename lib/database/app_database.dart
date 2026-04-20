@@ -12,7 +12,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -35,6 +35,13 @@ class AppDatabase extends _$AppDatabase {
           if (from < 4) {
             await m.addColumn(routineExercises, routineExercises.notes);
             await m.createTable(workoutExercises);
+          }
+          if (from < 5) {
+            await m.addColumn(routines, routines.isDraft);
+          }
+          if (from < 6) {
+            await m.addColumn(routineExercises, routineExercises.useLbs);
+            await m.addColumn(workoutExercises, workoutExercises.useLbs);
           }
         },
       );
@@ -109,13 +116,31 @@ class AppDatabase extends _$AppDatabase {
   // ─── Routine DAO ───────────────────────────────────────────────────────────
 
   Future<List<Routine>> getAllRoutines() =>
-      (select(routines)..where((r) => r.isDeleted.equals(false))).get();
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(false)))
+          .get();
 
   Stream<List<Routine>> watchAllRoutines() =>
-      (select(routines)..where((r) => r.isDeleted.equals(false))).watch();
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(false)))
+          .watch();
 
   Future<Routine?> getRoutineById(int id) =>
       (select(routines)..where((r) => r.id.equals(id))).getSingleOrNull();
+
+  Future<Routine?> getDraftRoutine() =>
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(true))
+            ..orderBy([(r) => OrderingTerm.desc(r.lastModifiedAt)])
+            ..limit(1))
+          .getSingleOrNull();
+
+  Stream<Routine?> watchDraftRoutine() =>
+      (select(routines)
+            ..where((r) => r.isDeleted.equals(false) & r.isDraft.equals(true))
+            ..orderBy([(r) => OrderingTerm.desc(r.lastModifiedAt)])
+            ..limit(1))
+          .watchSingleOrNull();
 
   Future<int> insertRoutine(RoutinesCompanion entry) => into(routines).insert(
         entry.copyWith(
@@ -302,6 +327,15 @@ class AppDatabase extends _$AppDatabase {
       (update(workoutExercises)..where((we) => we.id.equals(id))).write(
         WorkoutExercisesCompanion(
           notes: Value(notes),
+          lastModifiedAt: Value(DateTime.now()),
+          syncStatus: const Value(1),
+        ),
+      );
+
+  Future<void> updateWorkoutExerciseUseLbs(int id, bool? useLbs) =>
+      (update(workoutExercises)..where((we) => we.id.equals(id))).write(
+        WorkoutExercisesCompanion(
+          useLbs: Value(useLbs),
           lastModifiedAt: Value(DateTime.now()),
           syncStatus: const Value(1),
         ),
