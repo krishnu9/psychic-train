@@ -27,6 +27,7 @@ Routine _makeRoutine(int id, String name) => Routine(
       colorHex: 'FF6366F1',
       createdAt: DateTime(2024),
       lastModifiedAt: DateTime(2024),
+      isDraft: false,
       syncStatus: 0,
       isDeleted: false,
     );
