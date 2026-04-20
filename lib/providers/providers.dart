@@ -6,6 +6,7 @@ import '../database/connection/connection.dart';
 import '../repositories/repositories.dart';
 import '../services/sync_service.dart';
 import '../services/supabase_service.dart';
+import '../services/notification_service.dart';
 
 
 // ─── Database ────────────────────────────────────────────────────────────────
@@ -22,6 +23,12 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return SyncService(ref.watch(databaseProvider));
 });
 
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return const NullNotificationService();
+});
+
 // ─── Repositories ────────────────────────────────────────────────────────────
 
 final exerciseRepositoryProvider = Provider<ExerciseRepository>((ref) {
@@ -33,7 +40,11 @@ final routineRepositoryProvider = Provider<RoutineRepository>((ref) {
 });
 
 final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
-  return WorkoutRepository(ref.watch(databaseProvider), ref.watch(syncServiceProvider));
+  return WorkoutRepository(
+    ref.watch(databaseProvider),
+    ref.watch(syncServiceProvider),
+    notificationService: ref.watch(notificationServiceProvider),
+  );
 });
 
 // ─── Exercise providers ──────────────────────────────────────────────────────
@@ -67,6 +78,11 @@ final workoutsProvider = StreamProvider<List<Workout>>((ref) {
 final workoutSetsProvider =
     StreamProvider.family<List<LoggedSet>, int>((ref, workoutId) {
   return ref.watch(workoutRepositoryProvider).watchSets(workoutId);
+});
+
+final workoutExercisesProvider =
+    StreamProvider.family<List<WorkoutExerciseEntry>, int>((ref, workoutId) {
+  return ref.watch(workoutRepositoryProvider).watchWorkoutExercises(workoutId);
 });
 
 // ─── Stats providers ─────────────────────────────────────────────────────────
@@ -124,6 +140,9 @@ final filteredExercisesProvider = Provider<AsyncValue<List<Exercise>>>((ref) {
       return ref.watch(personalExercisesProvider);
   }
 });
+
+/// Whether the active workout is minimized to the floating bar
+final workoutMinimizedProvider = StateProvider<bool>((ref) => false);
 
 /// Default rest timer duration in seconds
 final restTimerDurationProvider = StateProvider<int>((ref) => 90);

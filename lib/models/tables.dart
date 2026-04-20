@@ -114,6 +114,7 @@ class RoutineExercises extends Table {
   IntColumn get targetReps => integer().withDefault(const Constant(10))();
   RealColumn get targetWeight => real().withDefault(const Constant(0.0))();
   TextColumn get sectionName => text().withDefault(const Constant(''))();
+  TextColumn get notes => text().withDefault(const Constant(''))();
 
   // Sync-ready columns
   DateTimeColumn get lastModifiedAt => dateTime()();
@@ -128,6 +129,21 @@ class Workouts extends Table {
   IntColumn get routineId => integer().nullable()();
   DateTimeColumn get startTime => dateTime()();
   DateTimeColumn get endTime => dateTime().nullable()();
+  TextColumn get notes => text().withDefault(const Constant(''))();
+
+  // Sync-ready columns
+  DateTimeColumn get lastModifiedAt => dateTime()();
+  IntColumn get syncStatus => integer().withDefault(const Constant(0))();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+}
+
+@DataClassName('WorkoutExerciseEntry')
+class WorkoutExercises extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get clientId => text()();
+  IntColumn get workoutId => integer().references(Workouts, #id)();
+  IntColumn get exerciseId => integer().references(Exercises, #id)();
+  IntColumn get displayOrder => integer().withDefault(const Constant(0))();
   TextColumn get notes => text().withDefault(const Constant(''))();
 
   // Sync-ready columns

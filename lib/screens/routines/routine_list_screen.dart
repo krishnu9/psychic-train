@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
 import '../../database/app_database.dart';
 import 'routine_edit_screen.dart';
+import '../workout/active_workout_screen.dart';
 
 class RoutineListScreen extends ConsumerWidget {
   const RoutineListScreen({super.key});
@@ -11,6 +12,8 @@ class RoutineListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final routinesAsync = ref.watch(routinesProvider);
+    // Subscribe early (first frame) so the value is ready when tiles build
+    final activeWorkoutId = ref.watch(incompleteWorkoutProvider).valueOrNull?.id;
 
     return SafeArea(
       child: Column(
@@ -95,7 +98,7 @@ class RoutineListScreen extends ConsumerWidget {
                   itemCount: routines.length,
                   itemBuilder: (context, index) {
                     final routine = routines[index];
-                    return _RoutineListTile(routine: routine);
+                    return _RoutineListTile(routine: routine, activeWorkoutId: activeWorkoutId);
                   },
                 );
               },
@@ -112,7 +115,8 @@ class RoutineListScreen extends ConsumerWidget {
 
 class _RoutineListTile extends ConsumerWidget {
   final Routine routine;
-  const _RoutineListTile({required this.routine});
+  final int? activeWorkoutId;
+  const _RoutineListTile({required this.routine, this.activeWorkoutId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -128,100 +132,156 @@ class _RoutineListTile extends ConsumerWidget {
           width: 1,
         ),
       ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(Icons.fitness_center_rounded, color: color, size: 22),
-        ),
-        title: Text(
-          routine.name,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        subtitle: routine.description.isNotEmpty
-            ? Text(
-                routine.description,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )
-            : null,
-        trailing: PopupMenuButton<String>(
-          color: AppColors.surfaceLight,
-          icon: const Icon(Icons.more_vert_rounded,
-              color: AppColors.textMuted),
-          itemBuilder: (ctx) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(
-                value: 'duplicate', child: Text('Duplicate')),
-            const PopupMenuItem(
-              value: 'delete',
-              child: Text('Delete', style: TextStyle(color: AppColors.error)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child:
+                  Icon(Icons.fitness_center_rounded, color: color, size: 22),
             ),
-          ],
-          onSelected: (action) async {
-            switch (action) {
-              case 'edit':
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        RoutineEditScreen(routineId: routine.id),
-                  ),
-                );
-              case 'duplicate':
-                await ref.read(routineRepositoryProvider).duplicate(
-                      routine.id,
-                      '${routine.name} (Copy)',
+            title: Text(
+              routine.name,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            subtitle: routine.description.isNotEmpty
+                ? Text(
+                    routine.description,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : null,
+            trailing: PopupMenuButton<String>(
+              color: AppColors.surfaceLight,
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: AppColors.textMuted),
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                const PopupMenuItem(
+                    value: 'duplicate', child: Text('Duplicate')),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Delete',
+                      style: TextStyle(color: AppColors.error)),
+                ),
+              ],
+              onSelected: (action) async {
+                switch (action) {
+                  case 'edit':
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            RoutineEditScreen(routineId: routine.id),
+                      ),
                     );
-              case 'delete':
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: AppColors.surface,
-                    title: const Text('Delete Routine?'),
-                    content: Text(
-                        'Are you sure you want to delete "${routine.name}"?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
+                  case 'duplicate':
+                    await ref.read(routineRepositoryProvider).duplicate(
+                          routine.id,
+                          '${routine.name} (Copy)',
+                        );
+                  case 'delete':
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: AppColors.surface,
+                        title: const Text('Delete Routine?'),
+                        content: Text(
+                            'Are you sure you want to delete "${routine.name}"?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Delete',
+                                style: TextStyle(color: AppColors.error)),
+                          ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Delete',
-                            style: TextStyle(color: AppColors.error)),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await ref
-                      .read(routineRepositoryProvider)
-                      .delete(routine.id);
+                    );
+                    if (confirm == true) {
+                      await ref
+                          .read(routineRepositoryProvider)
+                          .delete(routine.id);
+                    }
                 }
-            }
-          },
-        ),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                RoutineEditScreen(routineId: routine.id),
+              },
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => RoutineEditScreen(routineId: routine.id),
+              ),
+            ),
           ),
-        ),
+          // Start Workout button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                if (activeWorkoutId != null) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: AppColors.surface,
+                      title: const Text('Workout Already Active'),
+                      content: const Text(
+                          'Finish your current workout before starting a new one.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('OK'),
+                        ),
+                      ],
+                    ),
+                  );
+                  return;
+                }
+                final workoutId = await ref
+                    .read(workoutRepositoryProvider)
+                    .start(routineId: routine.id);
+                if (context.mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ActiveWorkoutScreen(
+                        workoutId: workoutId,
+                        routineId: routine.id,
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.play_arrow_rounded, size: 18),
+              label: const Text('Start Workout'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 38),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -235,6 +235,11 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                                       .updateExercise(entry.id,
                                           sectionName: section);
                                 },
+                                onNotesChanged: (notes) async {
+                                  await ref
+                                      .read(routineRepositoryProvider)
+                                      .updateExercise(entry.id, notes: notes);
+                                },
                               );
                             },
                           );
@@ -379,6 +384,7 @@ class _RoutineExerciseItem extends ConsumerStatefulWidget {
   final VoidCallback onDelete;
   final void Function(int? sets, int? reps, double? weight) onUpdate;
   final void Function(String section) onSectionChanged;
+  final void Function(String notes) onNotesChanged;
 
   const _RoutineExerciseItem({
     super.key,
@@ -387,6 +393,7 @@ class _RoutineExerciseItem extends ConsumerStatefulWidget {
     required this.onDelete,
     required this.onUpdate,
     required this.onSectionChanged,
+    required this.onNotesChanged,
   });
 
   @override
@@ -581,6 +588,30 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
               ),
               style: const TextStyle(fontSize: 13),
               onChanged: (v) => widget.onSectionChanged(v.trim()),
+            ),
+          ),
+
+          // Notes field
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: TextField(
+              controller: TextEditingController(text: widget.entry.notes),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.surfaceLight,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                hintText: 'Notes (optional)',
+                hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                prefixIcon: const Icon(Icons.notes_rounded,
+                    color: AppColors.textMuted, size: 18),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 13),
+              onChanged: (v) => widget.onNotesChanged(v),
             ),
           ),
 

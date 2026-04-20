@@ -12,7 +12,7 @@ extension PumpApp on WidgetTester {
       ProviderScope(
         overrides: overrides,
         child: MaterialApp(
-          home: widget,
+          home: Scaffold(body: widget),
         ),
       ),
     );

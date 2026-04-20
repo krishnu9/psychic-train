@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 export 'package:drift/drift.dart' show Value;
 import '../database/app_database.dart';
 import '../services/sync_service.dart';
+import '../services/notification_service.dart';
 
 /// Repository abstraction for exercises.
 /// Providers talk to this – never directly to the database.
@@ -124,7 +125,7 @@ class RoutineRepository {
       _db.watchRoutineExercises(routineId);
 
   Future<int> addExercise(int routineId, int exerciseId, int order,
-          {int sets = 3, int reps = 10, double weight = 0, String sectionName = ''}) async {
+          {int sets = 3, int reps = 10, double weight = 0, String sectionName = '', String notes = ''}) async {
     final id = await _db.insertRoutineExercise(RoutineExercisesCompanion(
       routineId: Value(routineId),
       exerciseId: Value(exerciseId),
@@ -133,19 +134,21 @@ class RoutineRepository {
       targetReps: Value(reps),
       targetWeight: Value(weight),
       sectionName: Value(sectionName),
+      notes: Value(notes),
     ));
     // Defer push to background sync to keep UI fast
     return id;
   }
 
   Future<void> updateExercise(int id,
-          {int? sets, int? reps, double? weight, String? sectionName}) async {
+          {int? sets, int? reps, double? weight, String? sectionName, String? notes}) async {
     await _db.updateRoutineExercise(RoutineExercisesCompanion(
       id: Value(id),
       targetSets: sets != null ? Value(sets) : const Value.absent(),
       targetReps: reps != null ? Value(reps) : const Value.absent(),
       targetWeight: weight != null ? Value(weight) : const Value.absent(),
       sectionName: sectionName != null ? Value(sectionName) : const Value.absent(),
+      notes: notes != null ? Value(notes) : const Value.absent(),
     ));
   }
 
@@ -158,7 +161,9 @@ class RoutineRepository {
 class WorkoutRepository {
   final AppDatabase _db;
   final SyncService _sync;
-  WorkoutRepository(this._db, this._sync);
+  final NotificationService? _notifications;
+  WorkoutRepository(this._db, this._sync, {NotificationService? notificationService})
+      : _notifications = notificationService;
 
   Future<List<Workout>> getAll() => _db.getAllWorkouts();
   Stream<List<Workout>> watchAll() => _db.watchAllWorkouts();
@@ -166,29 +171,86 @@ class WorkoutRepository {
   Future<Workout?> getIncompleteWorkout() => _db.getIncompleteWorkout();
   Stream<Workout?> watchIncompleteWorkout() => _db.watchIncompleteWorkout();
 
+  // Workout exercises
+  Future<List<WorkoutExerciseEntry>> getWorkoutExercises(int workoutId) =>
+      _db.getWorkoutExercises(workoutId);
+  Stream<List<WorkoutExerciseEntry>> watchWorkoutExercises(int workoutId) =>
+      _db.watchWorkoutExercises(workoutId);
+
+  Future<int> upsertWorkoutExercise({
+    required int workoutId,
+    required int exerciseId,
+    int displayOrder = 0,
+    String notes = '',
+  }) =>
+      _db.upsertWorkoutExercise(WorkoutExercisesCompanion(
+        workoutId: Value(workoutId),
+        exerciseId: Value(exerciseId),
+        displayOrder: Value(displayOrder),
+        notes: Value(notes),
+      ));
+
+  Future<void> appendWorkoutExercise({
+    required int workoutId,
+    required int exerciseId,
+  }) async {
+    final existing = await getWorkoutExercises(workoutId);
+    final nextOrder = existing.isEmpty ? 0 : existing.last.displayOrder + 1;
+    await upsertWorkoutExercise(
+      workoutId: workoutId,
+      exerciseId: exerciseId,
+      displayOrder: nextOrder,
+    );
+  }
+
+  Future<void> updateWorkoutExerciseNotes(int id, String notes) =>
+      _db.updateWorkoutExerciseNotes(id, notes);
+
+  Future<void> removeWorkoutExercise(int id) =>
+      _db.softDeleteWorkoutExercise(id);
+
+  Future<void> reorderWorkoutExercises(
+          int workoutId, List<int> orderedExerciseIds) =>
+      _db.reorderWorkoutExercises(workoutId, orderedExerciseIds);
+
   Future<int> start({int? routineId}) async {
+    final startTime = DateTime.now();
     final id = await _db.insertWorkout(WorkoutsCompanion(
       routineId: routineId != null ? Value(routineId) : const Value.absent(),
-      startTime: Value(DateTime.now()),
+      startTime: Value(startTime),
     ));
     final w = await getById(id);
     if (w != null) {
       if (await _sync.pushWorkout(w)) await _db.markSynced('workouts', id);
     }
+    // Copy routine exercises into WorkoutExercises rows
+    if (routineId != null) {
+      final routineExercises = await _db.getRoutineExercises(routineId);
+      for (final re in routineExercises) {
+        await upsertWorkoutExercise(
+          workoutId: id,
+          exerciseId: re.exerciseId,
+          displayOrder: re.displayOrder,
+          notes: re.notes,
+        );
+      }
+    }
+    await _notifications?.scheduleWorkoutOverdueAlert(id, startTime: startTime);
     return id;
   }
 
   Future<void> finish(int id, {String? notes}) async {
     await _db.finishWorkout(id, notes: notes);
+    await _notifications?.cancelWorkoutAlert(id);
     final w = await getById(id);
     if (w != null) {
-      // when a workout finishes, trigger a sync to save all its log sets too
       _sync.syncAll();
     }
   }
 
   Future<void> delete(int id) async {
     await _db.softDeleteWorkout(id);
+    await _notifications?.cancelWorkoutAlert(id);
     final w = await getById(id);
     if (w != null) {
       if (await _sync.pushWorkout(w)) await _db.markSynced('workouts', id);

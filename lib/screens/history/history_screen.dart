@@ -99,6 +99,7 @@ class _WorkoutHistoryTile extends ConsumerStatefulWidget {
 
 class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
   bool _isExpanded = false;
+  bool _isEditing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +109,9 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
         : Duration.zero;
     final dateStr = DateFormat('EEE, MMM d').format(workout.startTime);
     final timeStr = DateFormat('h:mm a').format(workout.startTime);
+
+    // Eagerly subscribe so sets are loaded before expansion
+    ref.watch(workoutSetsProvider(workout.id));
 
     // Get routine name if linked
     final routineData = workout.routineId != null
@@ -130,75 +134,79 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
       child: Column(
         children: [
           // Main tile
-          InkWell(
-            borderRadius: BorderRadius.circular(16),
+          ListTile(
+            contentPadding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
             onTap: () => setState(() => _isExpanded = !_isExpanded),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+            leading: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Date icon
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          DateFormat('d').format(workout.startTime),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            height: 1,
-                          ),
-                        ),
-                        Text(
-                          DateFormat('MMM').format(workout.startTime),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    DateFormat('d').format(workout.startTime),
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      height: 1,
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          routineName ?? 'Free Workout',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$dateStr · $timeStr · ${Formatters.duration(duration)}',
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    DateFormat('MMM').format(workout.startTime),
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
                     ),
-                  ),
-                  AnimatedRotation(
-                    turns: _isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more_rounded,
-                        color: AppColors.textMuted),
                   ),
                 ],
               ),
+            ),
+            title: Text(
+              routineName ?? 'Free Workout',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            subtitle: Text(
+              '$dateStr · $timeStr · ${Formatters.duration(duration)}',
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _isEditing
+                        ? Icons.edit_off_rounded
+                        : Icons.edit_outlined,
+                    color: _isEditing
+                        ? AppColors.primary
+                        : AppColors.textMuted,
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() {
+                    if (!_isEditing) _isExpanded = true;
+                    _isEditing = !_isEditing;
+                  }),
+                  visualDensity: VisualDensity.compact,
+                ),
+                AnimatedRotation(
+                  turns: _isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(Icons.expand_more_rounded,
+                      color: AppColors.textMuted),
+                ),
+              ],
             ),
           ),
 
@@ -207,6 +215,8 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
             _WorkoutDetails(
               workoutId: workout.id,
               useLbs: widget.useLbs,
+              isEditing: _isEditing,
+              onEditDone: () => setState(() => _isEditing = false),
             ),
         ],
       ),
@@ -214,19 +224,64 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
   }
 }
 
-class _WorkoutDetails extends ConsumerWidget {
+class _WorkoutDetails extends ConsumerStatefulWidget {
   final int workoutId;
   final bool useLbs;
+  final bool isEditing;
+  final VoidCallback onEditDone;
+  final Map<int, String> exerciseNames;
 
   const _WorkoutDetails({
     required this.workoutId,
     required this.useLbs,
+    required this.isEditing,
+    required this.onEditDone,
+    this.exerciseNames = const {},
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final setsAsync = ref.watch(workoutSetsProvider(workoutId));
-    final exercisesAsync = ref.watch(exercisesProvider);
+  ConsumerState<_WorkoutDetails> createState() => _WorkoutDetailsState();
+}
+
+class _WorkoutDetailsState extends ConsumerState<_WorkoutDetails> {
+  final Map<int, TextEditingController> _weightCtrls = {};
+  final Map<int, TextEditingController> _repsCtrls = {};
+
+  @override
+  void dispose() {
+    for (final c in _weightCtrls.values) {
+      c.dispose();
+    }
+    for (final c in _repsCtrls.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _initControllers(List<LoggedSet> sets) {
+    for (final s in sets) {
+      _weightCtrls.putIfAbsent(
+          s.id, () => TextEditingController(text: s.weight.toString()));
+      _repsCtrls.putIfAbsent(
+          s.id, () => TextEditingController(text: s.reps.toString()));
+    }
+  }
+
+  Future<void> _saveEdits(List<LoggedSet> sets) async {
+    final workoutRepo = ref.read(workoutRepositoryProvider);
+    for (final s in sets) {
+      final weight = double.tryParse(_weightCtrls[s.id]?.text ?? '');
+      final reps = int.tryParse(_repsCtrls[s.id]?.text ?? '');
+      if (weight != null && reps != null) {
+        await workoutRepo.updateSet(s.id, weight: weight, reps: reps);
+      }
+    }
+    widget.onEditDone();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final setsAsync = ref.watch(workoutSetsProvider(widget.workoutId));
 
     return setsAsync.when(
       data: (sets) {
@@ -238,17 +293,14 @@ class _WorkoutDetails extends ConsumerWidget {
           );
         }
 
-        // Group sets by exercise
+        _initControllers(sets);
+
         final grouped = <int, List<LoggedSet>>{};
         for (final s in sets) {
           grouped.putIfAbsent(s.exerciseId, () => []).add(s);
         }
 
-        final exerciseNames = exercisesAsync.when(
-          data: (list) => {for (final e in list) e.id: e.name},
-          loading: () => <int, String>{},
-          error: (_, __) => <int, String>{},
-        );
+        final exerciseNames = widget.exerciseNames;
 
         double totalVolume = 0;
         for (final s in sets) {
@@ -258,14 +310,13 @@ class _WorkoutDetails extends ConsumerWidget {
         return Column(
           children: [
             const Divider(height: 1),
-            // Volume summary
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
                   Text(
-                    'Total Volume: ${Formatters.volume(totalVolume, useLbs: useLbs)}',
+                    'Total Volume: ${Formatters.volume(totalVolume, useLbs: widget.useLbs)}',
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w600,
@@ -283,7 +334,6 @@ class _WorkoutDetails extends ConsumerWidget {
                 ],
               ),
             ),
-            // Exercise breakdown
             ...grouped.entries.map((entry) {
               final exName =
                   exerciseNames[entry.key] ?? 'Exercise #${entry.key}';
@@ -302,20 +352,95 @@ class _WorkoutDetails extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    ...exSets.map((s) => Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Text(
-                            'Set ${s.setNumber}: ${Formatters.weight(s.weight, useLbs: useLbs)} × ${s.reps} reps',
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 12,
+                    ...exSets.map((s) => widget.isEditing
+                        ? Padding(
+                            padding: const EdgeInsets.only(
+                                left: 8, bottom: 4),
+                            child: Row(
+                              children: [
+                                Text('Set ${s.setNumber}: ',
+                                    style: const TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 12)),
+                                SizedBox(
+                                  width: 64,
+                                  child: TextFormField(
+                                    controller: _weightCtrls[s.id],
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 4),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      hintText: 'kg',
+                                    ),
+                                  ),
+                                ),
+                                const Text(' × ',
+                                    style: TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 12)),
+                                SizedBox(
+                                  width: 48,
+                                  child: TextFormField(
+                                    controller: _repsCtrls[s.id],
+                                    keyboardType: TextInputType.number,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 4),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      hintText: 'reps',
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        )),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(
+                              'Set ${s.setNumber}: ${Formatters.weight(s.weight, useLbs: widget.useLbs)} × ${s.reps} reps',
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          )),
                   ],
                 ),
               );
             }),
+            if (widget.isEditing)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: widget.onEditDone,
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => _saveEdits(sets),
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 8),
           ],
         );
