@@ -19,7 +19,7 @@ Add a "Start Workout" button directly on each routine card/detail screen so user
 ## 8. Notes entry for every exercise
 Add a per-exercise notes field in both the active workout screen and the routine edit screen. Requires a schema migration to add a `notes` column to the relevant tables (exercise entries in workouts and routines). Do this before later features build on the exercise data model.
 
-## 9. Edit exercises in past workouts
+## 9. ~~Edit exercises in past workouts~~ ✓ Done
 Allow users to edit sets, reps, weight, and notes for exercises in already-completed workouts. Requires unlocking the read-only workout log view and wiring save logic back to the DB.
 
 ## 10. Drag and rearrange exercises in active workout
@@ -28,7 +28,7 @@ Let users drag to reorder exercises within an active workout session. Requires a
 ## 11. Minimize active workout (floating persistent bar)
 Add an option to minimize the current workout into a compact floating bar at the bottom of the screen, allowing navigation to other parts of the app while keeping the workout timer running. Tapping the bar returns to the active workout. Build after exercise ordering (item 10) is stable.
 
-## 12. Notification when workout exceeds 1.5 hours
+## 12. ~~Notification when workout exceeds 1.5 hours~~ ✓ Done
 Send a local push notification prompting the user to finish or cancel their workout if it has been running for more than 90 minutes. Requires setting up Flutter local notifications and a background timer/alarm. Best implemented last as it depends on a stable active workout flow.
 
 ## 13. Hide add-exercise button when keyboard is open
@@ -36,3 +36,15 @@ Hide the "Add exercise" button in the active workout / routine edit screens whil
 
 ## 14. Stick resume-workout bar to bottom navigation
 The minimized "Resume Workout" bar currently floats and does not stick to the bottom navigation / tab bar. Dock it directly above the bottom nav so it behaves as a persistent strip across screens instead of overlapping content.
+
+## 15. ~~Quick Start (empty workout)~~ ✓ Done
+Add option on the home screen "Start Workout" button to start a new empty workout (no routine) in addition to launching from a saved routine.
+
+## 16. ~~Save active workout as a new routine~~ ✓ Done
+In the active workout screen overflow menu, let users save the current exercise list as a named routine.
+
+## 17. ~~Make rest timer optional~~ ✓ Done
+Settings toggle to disable the automatic rest timer that starts after completing a set. When disabled, no overlay appears. Duration setting is hidden when rest timer is off.
+
+## 18. ~~Minimize rest timer~~ ✓ Done
+Add a minimize button on the rest timer overlay that collapses it to a small floating chip in the top-right corner. Tapping the chip expands it again; the × button dismisses it.

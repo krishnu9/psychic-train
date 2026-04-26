@@ -35,7 +35,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
 // ─── Notifications ───────────────────────────────────────────────────────────
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
-  return const NullNotificationService();
+  return LocalNotificationService();
 });
 
 // ─── Repositories ────────────────────────────────────────────────────────────
@@ -265,6 +265,26 @@ final workoutMinimizedProvider = StateProvider<bool>((ref) => false);
 
 /// Default rest timer duration in seconds
 final restTimerDurationProvider = StateProvider<int>((ref) => 90);
+
+/// Whether the rest timer should start automatically after completing a set
+final restTimerEnabledProvider =
+    NotifierProvider<RestTimerEnabledNotifier, bool>(
+        RestTimerEnabledNotifier.new);
+
+class RestTimerEnabledNotifier extends Notifier<bool> {
+  static const _key = 'rest_timer_enabled';
+
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getBool(_key) ?? true;
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    await ref.read(sharedPreferencesProvider).setBool(_key, value);
+  }
+}
 
 /// Global weight unit preference (false = kg, true = lbs).
 /// Persisted to SharedPreferences. Individual exercises can override via

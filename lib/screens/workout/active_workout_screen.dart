@@ -27,16 +27,17 @@ class ActiveWorkoutScreen extends ConsumerStatefulWidget {
 }
 
 class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
-  // Elapsed timer
-  late final Stopwatch _stopwatch;
+  // Elapsed timer — always computed from the DB-stored start time so the
+  // display stays accurate even when the screen is off or the app is backgrounded.
+  DateTime? _workoutStartTime;
   Timer? _elapsedTimer;
   String _elapsed = '00:00';
-  Duration _elapsedOffset = Duration.zero;
 
   // Rest timer
   Timer? _restTimer;
   int _restRemaining = 0;
   bool _showRestTimer = false;
+  bool _restTimerMinimized = false;
 
   // Workout exercise data
   final List<_WorkoutExerciseData> _exerciseDataList = [];
@@ -45,7 +46,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   @override
   void initState() {
     super.initState();
-    _stopwatch = Stopwatch()..start();
     _loadWorkoutStartTime();
     _loadExistingSetsOrRoutine();
   }
@@ -59,17 +59,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     }
     if (!mounted) return;
     if (workout != null) {
-      setState(() {
-        final raw = DateTime.now().difference(workout!.startTime);
-        _elapsedOffset = raw.isNegative ? Duration.zero : raw;
-      });
-    }
-    // Only start the periodic timer once we know the workout exists
-    if (workout != null && mounted) {
+      _workoutStartTime = workout.startTime;
       _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) {
           setState(() {
-            _elapsed = Formatters.duration(_stopwatch.elapsed + _elapsedOffset);
+            _elapsed = Formatters.duration(
+                DateTime.now().difference(_workoutStartTime!));
           });
         }
       });
@@ -288,22 +283,28 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   void dispose() {
     _elapsedTimer?.cancel();
     _restTimer?.cancel();
-    _stopwatch.stop();
     super.dispose();
   }
 
   void _startRestTimer() {
+    if (!ref.read(restTimerEnabledProvider)) return;
     final duration = ref.read(restTimerDurationProvider);
     setState(() {
       _restRemaining = duration;
       _showRestTimer = true;
+      _restTimerMinimized = false;
     });
     _restTimer?.cancel();
     _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_restRemaining <= 1) {
         timer.cancel();
         HapticFeedback.heavyImpact();
-        if (mounted) setState(() => _showRestTimer = false);
+        if (mounted) {
+          setState(() {
+            _showRestTimer = false;
+            _restTimerMinimized = false;
+          });
+        }
       } else {
         if (mounted) setState(() => _restRemaining--);
       }
@@ -312,7 +313,18 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
   void _dismissRestTimer() {
     _restTimer?.cancel();
-    setState(() => _showRestTimer = false);
+    setState(() {
+      _showRestTimer = false;
+      _restTimerMinimized = false;
+    });
+  }
+
+  void _minimizeRestTimer() {
+    setState(() => _restTimerMinimized = true);
+  }
+
+  void _expandRestTimer() {
+    setState(() => _restTimerMinimized = false);
   }
 
   Future<void> _completeSet(int exerciseIndex, int setIndex) async {
@@ -478,6 +490,75 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     }
   }
 
+  Future<void> _saveAsRoutine() async {
+    if (_exerciseDataList.isEmpty) return;
+    final nameCtrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Save as Routine'),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Routine name'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () {
+                final v = nameCtrl.text.trim();
+                if (v.isNotEmpty) Navigator.pop(ctx, v);
+              },
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    nameCtrl.dispose();
+    if (name == null || !mounted) return;
+
+    final routineRepo = ref.read(routineRepositoryProvider);
+    final routineId = await routineRepo.create(name: name);
+    for (var i = 0; i < _exerciseDataList.length; i++) {
+      final ex = _exerciseDataList[i];
+      final completedSets = ex.sets.where((s) => s.isCompleted).toList();
+      final targetSets = ex.sets.length;
+      final targetReps = completedSets.isNotEmpty
+          ? (completedSets.map((s) => s.reps).reduce((a, b) => a + b) ~/
+              completedSets.length)
+          : 10;
+      final targetWeight = completedSets.isNotEmpty
+          ? completedSets
+                  .map((s) => s.weight)
+                  .reduce((a, b) => a + b) /
+              completedSets.length
+          : 0.0;
+      await routineRepo.addExercise(
+        routineId,
+        ex.exercise.id,
+        i,
+        sets: targetSets,
+        reps: targetReps,
+        weight: targetWeight,
+        sectionName: ex.sectionName,
+        notes: ex.notes,
+        useLbs: ex.useLbsOverride,
+      );
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved as routine "$name"'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _finishWorkout() async {
     final totalSets = _exerciseDataList.fold<int>(
         0, (sum, ex) => sum + ex.sets.where((s) => s.isCompleted).length);
@@ -560,6 +641,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     onFinish: _finishWorkout,
                     onCancel: _cancelWorkout,
                     onMinimize: _minimizeWorkout,
+                    onSaveAsRoutine: _saveAsRoutine,
                   ),
 
                   // ─── Exercise cards ─────────────────────
@@ -686,7 +768,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
             ),
 
             // ─── Rest timer overlay ────────────────────
-            if (_showRestTimer)
+            if (_showRestTimer && !_restTimerMinimized)
               Positioned(
                 left: 0,
                 right: 0,
@@ -694,6 +776,52 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 child: _RestTimerOverlay(
                   remaining: _restRemaining,
                   onDismiss: _dismissRestTimer,
+                  onMinimize: _minimizeRestTimer,
+                ),
+              ),
+            // ─── Minimized rest timer chip ─────────────
+            if (_showRestTimer && _restTimerMinimized)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: GestureDetector(
+                  onTap: _expandRestTimer,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_rounded,
+                            color: AppColors.background, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          Formatters.restTimer(_restRemaining),
+                          style: const TextStyle(
+                            color: AppColors.background,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _dismissRestTimer,
+                          child: const Icon(Icons.close_rounded,
+                              color: AppColors.background, size: 14),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -752,12 +880,14 @@ class _WorkoutHeader extends StatelessWidget {
   final VoidCallback onFinish;
   final VoidCallback onCancel;
   final VoidCallback onMinimize;
+  final VoidCallback onSaveAsRoutine;
 
   const _WorkoutHeader({
     required this.elapsed,
     required this.onFinish,
     required this.onCancel,
     required this.onMinimize,
+    required this.onSaveAsRoutine,
   });
 
   @override
@@ -811,6 +941,28 @@ class _WorkoutHeader extends StatelessWidget {
             tooltip: 'Minimize',
             icon: const Icon(Icons.keyboard_arrow_down_rounded,
                 color: AppColors.textMuted, size: 24),
+          ),
+          // Save as Routine
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded,
+                color: AppColors.textMuted, size: 22),
+            color: AppColors.surface,
+            onSelected: (v) {
+              if (v == 'save_routine') onSaveAsRoutine();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'save_routine',
+                child: Row(
+                  children: [
+                    Icon(Icons.bookmark_add_outlined,
+                        size: 18, color: AppColors.textSecondary),
+                    SizedBox(width: 10),
+                    Text('Save as Routine'),
+                  ],
+                ),
+              ),
+            ],
           ),
           const Spacer(),
           // Finish button
@@ -869,6 +1021,15 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   void initState() {
     super.initState();
     _notesController = TextEditingController(text: widget.data.notes);
+  }
+
+  @override
+  void didUpdateWidget(_ExerciseCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data &&
+        _notesController.text != widget.data.notes) {
+      _notesController.text = widget.data.notes;
+    }
   }
 
   @override
@@ -1278,16 +1439,18 @@ class _SetRowState extends State<_SetRow> {
 class _RestTimerOverlay extends StatelessWidget {
   final int remaining;
   final VoidCallback onDismiss;
+  final VoidCallback onMinimize;
 
   const _RestTimerOverlay({
     required this.remaining,
     required this.onDismiss,
+    required this.onMinimize,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -1302,15 +1465,27 @@ class _RestTimerOverlay extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'Rest Timer',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Rest Timer',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              IconButton(
+                onPressed: onMinimize,
+                icon: const Icon(Icons.minimize_rounded,
+                    color: AppColors.textMuted, size: 20),
+                tooltip: 'Minimize',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             Formatters.restTimer(remaining),
             style: const TextStyle(

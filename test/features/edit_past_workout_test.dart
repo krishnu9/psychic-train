@@ -148,11 +148,16 @@ void main() {
       when(() => workoutRepo.watchSets(any())).thenAnswer(
         (_) => Stream.value([_loggedSet()]),
       );
+      when(() => workoutRepo.watchWorkoutExercises(any())).thenAnswer(
+        (_) => Stream.value([]),
+      );
       when(() => workoutRepo.updateSet(
             any(),
             weight: any(named: 'weight'),
             reps: any(named: 'reps'),
           )).thenAnswer((_) async {});
+      when(() => workoutRepo.updateWorkoutExerciseNotes(any(), any()))
+          .thenAnswer((_) async {});
     });
 
     testWidgets('history screen renders completed workouts', (tester) async {
@@ -164,6 +169,12 @@ void main() {
           ),
           workoutSetsProvider.overrideWith(
             (ref, id) => Stream.value([_loggedSet()]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
           ),
           workoutRepositoryProvider.overrideWithValue(workoutRepo),
         ],
@@ -184,6 +195,12 @@ void main() {
           workoutSetsProvider.overrideWith(
             (ref, id) => Stream.value([_loggedSet()]),
           ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
+          ),
           workoutRepositoryProvider.overrideWithValue(workoutRepo),
         ],
       );
@@ -202,6 +219,12 @@ void main() {
           ),
           workoutSetsProvider.overrideWith(
             (ref, id) => Stream.value([_loggedSet()]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
           ),
           workoutRepositoryProvider.overrideWithValue(workoutRepo),
         ],
@@ -224,6 +247,12 @@ void main() {
           ),
           workoutSetsProvider.overrideWith(
             (ref, id) => Stream.value([_loggedSet(weight: 80, reps: 8)]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
           ),
           workoutRepositoryProvider.overrideWithValue(workoutRepo),
         ],
@@ -257,6 +286,12 @@ void main() {
           ),
           workoutSetsProvider.overrideWith(
             (ref, id) => Stream.value([_loggedSet()]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
           ),
           workoutRepositoryProvider.overrideWithValue(workoutRepo),
         ],

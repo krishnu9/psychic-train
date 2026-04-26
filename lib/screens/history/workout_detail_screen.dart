@@ -15,7 +15,6 @@ class WorkoutDetails extends ConsumerStatefulWidget {
   final bool useLbs;
   final bool isEditing;
   final VoidCallback onEditDone;
-  final Map<int, String> exerciseNames;
 
   const WorkoutDetails({
     super.key,
@@ -23,7 +22,6 @@ class WorkoutDetails extends ConsumerStatefulWidget {
     required this.useLbs,
     this.isEditing = false,
     this.onEditDone = _noop,
-    this.exerciseNames = const {},
   });
 
   static void _noop() {}
@@ -35,6 +33,8 @@ class WorkoutDetails extends ConsumerStatefulWidget {
 class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
   final Map<int, TextEditingController> _weightCtrls = {};
   final Map<int, TextEditingController> _repsCtrls = {};
+  // Notes controllers keyed by WorkoutExerciseEntry.id
+  final Map<int, TextEditingController> _notesCtrls = {};
 
   @override
   void dispose() {
@@ -44,10 +44,14 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
     for (final c in _repsCtrls.values) {
       c.dispose();
     }
+    for (final c in _notesCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _initControllers(List<LoggedSet> sets, Map<int, bool> unitByExercise) {
+  void _initControllers(List<LoggedSet> sets, Map<int, bool> unitByExercise,
+      List<WorkoutExerciseEntry> weList) {
     for (final s in sets) {
       final useLbs = unitByExercise[s.exerciseId] ?? widget.useLbs;
       final display = useLbs ? kgToLbs(s.weight) : s.weight;
@@ -56,6 +60,10 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
       _repsCtrls.putIfAbsent(
           s.id, () => TextEditingController(text: s.reps.toString()));
     }
+    for (final we in weList) {
+      _notesCtrls.putIfAbsent(
+          we.id, () => TextEditingController(text: we.notes));
+    }
   }
 
   static String _fmt(double v) {
@@ -63,8 +71,8 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
     return v.toStringAsFixed(1);
   }
 
-  Future<void> _saveEdits(
-      List<LoggedSet> sets, Map<int, bool> unitByExercise) async {
+  Future<void> _saveEdits(List<LoggedSet> sets, Map<int, bool> unitByExercise,
+      List<WorkoutExerciseEntry> weList) async {
     final workoutRepo = ref.read(workoutRepositoryProvider);
     for (final s in sets) {
       final typed = double.tryParse(_weightCtrls[s.id]?.text ?? '');
@@ -73,6 +81,12 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
         final useLbs = unitByExercise[s.exerciseId] ?? widget.useLbs;
         final kg = useLbs ? lbsToKg(typed) : typed;
         await workoutRepo.updateSet(s.id, weight: kg, reps: reps);
+      }
+    }
+    for (final we in weList) {
+      final notes = _notesCtrls[we.id]?.text ?? '';
+      if (notes != we.notes) {
+        await workoutRepo.updateWorkoutExerciseNotes(we.id, notes);
       }
     }
     widget.onEditDone();
@@ -103,14 +117,18 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
             ),
         };
 
-        _initControllers(sets, unitByExercise);
+        _initControllers(sets, unitByExercise, weList);
 
         final grouped = <int, List<LoggedSet>>{};
         for (final s in sets) {
           grouped.putIfAbsent(s.exerciseId, () => []).add(s);
         }
 
-        final exerciseNames = widget.exerciseNames;
+        final exercisesAsync = ref.watch(exercisesProvider);
+        final exerciseNames = <int, String>{
+          for (final e in exercisesAsync.valueOrNull ?? const <Exercise>[])
+            e.id: e.name,
+        };
 
         double totalVolume = 0;
         for (final s in sets) {
@@ -150,6 +168,10 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
               final exSets = entry.value;
               final exUseLbs =
                   unitByExercise[entry.key] ?? widget.useLbs;
+              // Find the WorkoutExerciseEntry for this exercise (for notes)
+              final we = weList
+                  .where((w) => w.exerciseId == entry.key)
+                  .firstOrNull;
               return Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                 child: Column(
@@ -163,6 +185,40 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
                         fontSize: 13,
                       ),
                     ),
+                    if (widget.isEditing && we != null) ...[
+                      const SizedBox(height: 4),
+                      TextFormField(
+                        controller: _notesCtrls[we.id],
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          hintText: 'Notes...',
+                          hintStyle: const TextStyle(
+                              color: AppColors.textMuted, fontSize: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        style: const TextStyle(fontSize: 12),
+                        maxLines: 1,
+                      ),
+                    ] else if (!widget.isEditing &&
+                        we != null &&
+                        we.notes.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Text(
+                          we.notes,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     ...exSets.map((s) => widget.isEditing
                         ? Padding(
@@ -247,7 +303,8 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: () => _saveEdits(sets, unitByExercise),
+                      onPressed: () =>
+                          _saveEdits(sets, unitByExercise, weList),
                       child: const Text('Save'),
                     ),
                   ],
@@ -277,16 +334,10 @@ class WorkoutDetailScreen extends ConsumerWidget {
     final useLbs = ref.watch(useLbsProvider);
     final workoutsAsync = ref.watch(workoutsProvider);
     final routinesAsync = ref.watch(routinesProvider);
-    final exercisesAsync = ref.watch(exercisesProvider);
 
     final workout = workoutsAsync.valueOrNull
         ?.where((w) => w.id == workoutId)
         .firstOrNull;
-
-    final exerciseNames = <int, String>{
-      for (final e in exercisesAsync.valueOrNull ?? const <Exercise>[])
-        e.id: e.name,
-    };
 
     String title = 'Workout';
     String? subtitle;
@@ -332,7 +383,6 @@ class WorkoutDetailScreen extends ConsumerWidget {
         child: WorkoutDetails(
           workoutId: workoutId,
           useLbs: useLbs,
-          exerciseNames: exerciseNames,
         ),
       ),
     );

@@ -38,7 +38,8 @@ class HomeScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
             _StartWorkoutButton(
-              onTap: () => onNavigate(_routinesTabIndex),
+              onTap: () =>
+                  _showWorkoutStartOptions(context, ref, onNavigate),
             ),
             const SizedBox(height: 20),
             _ConsistencyMapCard(),
@@ -655,6 +656,125 @@ class _RoutineCard extends ConsumerWidget {
   }
 }
 
+// ─── Start workout options sheet ─────────────────────────────────────────────
+
+Future<void> _showWorkoutStartOptions(
+    BuildContext context,
+    WidgetRef ref,
+    void Function(int) onNavigate) async {
+  final activeId = ref.read(activeWorkoutIdProvider);
+
+  if (activeId != null) {
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Workout Already Active'),
+        content: const Text(
+            'Finish your current workout before starting a new one.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
+  await showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (ctx) {
+      bool starting = false;
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 32,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text(
+              'Start Workout',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Quick start (empty workout)
+            ElevatedButton.icon(
+              onPressed: () async {
+                if (starting) return;
+                starting = true;
+                Navigator.pop(ctx);
+                final workoutId =
+                    await ref.read(workoutRepositoryProvider).start();
+                if (context.mounted) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ActiveWorkoutScreen(workoutId: workoutId),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.flash_on_rounded),
+              label: const Text('Quick Start (Empty)',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.background,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // From routine
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                onNavigate(2);
+              },
+              icon: const Icon(Icons.list_alt_rounded),
+              label: const Text('From Routine',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 // ─── Start-routine bottom sheet ──────────────────────────────────────────────
 
 Future<void> _showStartRoutineSheet(
@@ -665,6 +785,7 @@ Future<void> _showStartRoutineSheet(
   final allExercises = await ref.read(exerciseRepositoryProvider).getAll();
 
   if (!context.mounted) return;
+  bool starting = false;
 
   await showModalBottomSheet(
     context: context,
@@ -786,6 +907,8 @@ Future<void> _showStartRoutineSheet(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () async {
+                  if (starting) return;
+                  starting = true;
                   Navigator.pop(ctx);
                   final repo = ref.read(workoutRepositoryProvider);
                   final workoutId = await repo.start(routineId: routine.id);

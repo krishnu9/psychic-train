@@ -124,10 +124,12 @@ class _RoutineListTile extends ConsumerStatefulWidget {
 
 class _RoutineListTileState extends ConsumerState<_RoutineListTile> {
   bool _expanded = false;
+  bool _starting = false;
 
   Routine get _routine => widget.routine;
 
   Future<void> _startWorkout() async {
+    if (_starting) return;
     if (widget.activeWorkoutId != null) {
       await showDialog(
         context: context,
@@ -146,19 +148,24 @@ class _RoutineListTileState extends ConsumerState<_RoutineListTile> {
       );
       return;
     }
-    final workoutId = await ref
-        .read(workoutRepositoryProvider)
-        .start(routineId: _routine.id);
-    if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ActiveWorkoutScreen(
-          workoutId: workoutId,
-          routineId: _routine.id,
+    _starting = true;
+    try {
+      final workoutId = await ref
+          .read(workoutRepositoryProvider)
+          .start(routineId: _routine.id);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ActiveWorkoutScreen(
+            workoutId: workoutId,
+            routineId: _routine.id,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) _starting = false;
+    }
   }
 
   void _openEdit() {

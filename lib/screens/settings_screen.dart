@@ -11,6 +11,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final useLbs = ref.watch(useLbsProvider);
     final restDuration = ref.watch(restTimerDurationProvider);
+    final restEnabled = ref.watch(restTimerEnabledProvider);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -96,37 +97,52 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 _SettingsTile(
                   icon: Icons.timer_rounded,
-                  title: 'Default Rest Duration',
-                  subtitle: '${restDuration}s (${restDuration ~/ 60}:${(restDuration % 60).toString().padLeft(2, '0')})',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: restDuration > 15
-                            ? () => ref
-                                .read(restTimerDurationProvider.notifier)
-                                .state = restDuration - 15
-                            : null,
-                        icon: const Icon(Icons.remove_rounded, size: 20),
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.surfaceLight,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: restDuration < 300
-                            ? () => ref
-                                .read(restTimerDurationProvider.notifier)
-                                .state = restDuration + 15
-                            : null,
-                        icon: const Icon(Icons.add_rounded, size: 20),
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.surfaceLight,
-                        ),
-                      ),
-                    ],
+                  title: 'Auto Rest Timer',
+                  subtitle: restEnabled
+                      ? 'Starts automatically after each set'
+                      : 'Disabled',
+                  trailing: Switch(
+                    value: restEnabled,
+                    onChanged: (v) =>
+                        ref.read(restTimerEnabledProvider.notifier).set(v),
+                    activeThumbColor: AppColors.primary,
                   ),
                 ),
+                if (restEnabled)
+                  _SettingsTile(
+                    icon: Icons.hourglass_empty_rounded,
+                    title: 'Default Rest Duration',
+                    subtitle:
+                        '${restDuration}s (${restDuration ~/ 60}:${(restDuration % 60).toString().padLeft(2, '0')})',
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: restDuration > 15
+                              ? () => ref
+                                  .read(restTimerDurationProvider.notifier)
+                                  .state = restDuration - 15
+                              : null,
+                          icon: const Icon(Icons.remove_rounded, size: 20),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceLight,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: restDuration < 300
+                              ? () => ref
+                                  .read(restTimerDurationProvider.notifier)
+                                  .state = restDuration + 15
+                              : null,
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
 
