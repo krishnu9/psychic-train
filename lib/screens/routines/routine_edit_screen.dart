@@ -60,8 +60,9 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
   }
 
   Future<void> _loadRoutine() async {
-    final routine =
-        await ref.read(routineRepositoryProvider).getById(widget.routineId!);
+    final routine = await ref
+        .read(routineRepositoryProvider)
+        .getById(widget.routineId!);
     if (routine != null) {
       _nameController.text = routine.name;
       _descController.text = routine.description;
@@ -75,13 +76,14 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
     // explicit Save action to commit changes.
     if (!_isNew || _routineId == null) return;
     _autosaveTimer?.cancel();
-    _autosaveTimer =
-        Timer(const Duration(milliseconds: 400), _flushAutosave);
+    _autosaveTimer = Timer(const Duration(milliseconds: 400), _flushAutosave);
   }
 
   Future<void> _flushAutosave() async {
     if (_routineId == null) return;
-    await ref.read(routineRepositoryProvider).update(
+    await ref
+        .read(routineRepositoryProvider)
+        .update(
           _routineId!,
           name: _nameController.text,
           description: _descController.text,
@@ -116,6 +118,7 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
     final exercisesAsync = _routineId != null
         ? ref.watch(routineExercisesProvider(_routineId!))
         : null;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -129,9 +132,13 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
             ),
           TextButton(
             onPressed: _saveRoutine,
-            child: const Text('Save',
-                style: TextStyle(
-                    color: AppColors.primary, fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Save',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -151,7 +158,9 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                     ),
                     textCapitalization: TextCapitalization.words,
                     style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w600),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -167,15 +176,18 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                   const SizedBox(height: 20),
 
                   // ─── Color picker ──────────────────────
-                  Text('Color',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: AppColors.textSecondary,
-                          )),
+                  Text(
+                    'Color',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 10,
                     children: AppColors.routineColors.map((c) {
-                      final hex = c.toARGB32()
+                      final hex = c
+                          .toARGB32()
                           .toRadixString(16)
                           .toUpperCase()
                           .padLeft(8, '0');
@@ -211,24 +223,29 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Exercises',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton.icon(
-                            onPressed: () => _addSection(context),
-                            icon: const Icon(Icons.label_outline_rounded,
-                                size: 18),
-                            label: const Text('Section'),
-                          ),
-                          TextButton.icon(
-                            onPressed: () => _addExercise(context),
-                            icon: const Icon(Icons.add_rounded, size: 18),
-                            label: const Text('Add'),
-                          ),
-                        ],
+                      Text(
+                        'Exercises',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
+                      if (!keyboardOpen)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => _addSection(context),
+                              icon: const Icon(
+                                Icons.label_outline_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('Section'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _addExercise(context),
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text('Add'),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -245,12 +262,16 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                             ),
                             child: Column(
                               children: [
-                                Icon(Icons.add_circle_outline_rounded,
-                                    size: 40, color: AppColors.textMuted),
+                                Icon(
+                                  Icons.add_circle_outline_rounded,
+                                  size: 40,
+                                  color: AppColors.textMuted,
+                                ),
                                 const SizedBox(height: 8),
-                                Text('No exercises added yet',
-                                    style: TextStyle(
-                                        color: AppColors.textMuted)),
+                                Text(
+                                  'No exercises added yet',
+                                  style: TextStyle(color: AppColors.textMuted),
+                                ),
                               ],
                             ),
                           );
@@ -274,7 +295,8 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                             final prevSection = index > 0
                                 ? entries[index - 1].sectionName
                                 : '';
-                            final showHeader = entry.sectionName.isNotEmpty &&
+                            final showHeader =
+                                entry.sectionName.isNotEmpty &&
                                 entry.sectionName != prevSection;
                             return _RoutineExerciseItem(
                               key: ValueKey(entry.id),
@@ -288,16 +310,20 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                               onUpdate: (sets, reps, weight) async {
                                 await ref
                                     .read(routineRepositoryProvider)
-                                    .updateExercise(entry.id,
-                                        sets: sets,
-                                        reps: reps,
-                                        weight: weight);
+                                    .updateExercise(
+                                      entry.id,
+                                      sets: sets,
+                                      reps: reps,
+                                      weight: weight,
+                                    );
                               },
                               onSectionChanged: (section) async {
                                 await ref
                                     .read(routineRepositoryProvider)
-                                    .updateExercise(entry.id,
-                                        sectionName: section);
+                                    .updateExercise(
+                                      entry.id,
+                                      sectionName: section,
+                                    );
                               },
                               onNotesChanged: (notes) async {
                                 await ref
@@ -354,7 +380,8 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
         backgroundColor: AppColors.surface,
         title: const Text('Discard Draft?'),
         content: const Text(
-            'This will delete the routine you are currently creating. This cannot be undone.'),
+          'This will delete the routine you are currently creating. This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -362,8 +389,10 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Discard',
-                style: TextStyle(color: AppColors.error)),
+            child: const Text(
+              'Discard',
+              style: TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -392,9 +421,11 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
       final section = _pendingSection.isNotEmpty
           ? _pendingSection
           : entries.isNotEmpty
-              ? entries.last.sectionName
-              : '';
-      await ref.read(routineRepositoryProvider).addExercise(
+          ? entries.last.sectionName
+          : '';
+      await ref
+          .read(routineRepositoryProvider)
+          .addExercise(
             _routineId!,
             selected.id,
             entries.length,
@@ -440,10 +471,9 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
         .getExercises(_routineId!);
     if (entries.isNotEmpty) {
       // Set section on the last exercise so the next added exercise inherits it
-      await ref.read(routineRepositoryProvider).updateExercise(
-            entries.last.id,
-            sectionName: name,
-          );
+      await ref
+          .read(routineRepositoryProvider)
+          .updateExercise(entries.last.id, sectionName: name);
     }
     // Store the section name for next exercise additions
     setState(() => _pendingSection = name);
@@ -497,10 +527,9 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
   void _addSet() {
     setState(() {
       final last = _sets.isNotEmpty ? _sets.last : null;
-      _sets.add(_RoutineSetData(
-        weight: last?.weight ?? 0,
-        reps: last?.reps ?? 10,
-      ));
+      _sets.add(
+        _RoutineSetData(weight: last?.weight ?? 0, reps: last?.reps ?? 10),
+      );
     });
     _persistChanges();
   }
@@ -514,11 +543,7 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
   void _persistChanges() {
     // Use the first set's values as the template defaults
     final firstSet = _sets.isNotEmpty ? _sets.first : null;
-    widget.onUpdate(
-      _sets.length,
-      firstSet?.reps ?? 10,
-      firstSet?.weight ?? 0,
-    );
+    widget.onUpdate(_sets.length, firstSet?.reps ?? 10, firstSet?.weight ?? 0);
   }
 
   @override
@@ -526,7 +551,10 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
     final exercisesAsync = ref.watch(exercisesProvider);
     final exerciseName = exercisesAsync.when(
       data: (list) =>
-          list.where((e) => e.id == widget.entry.exerciseId).firstOrNull?.name ??
+          list
+              .where((e) => e.id == widget.entry.exerciseId)
+              .firstOrNull
+              ?.name ??
           'Unknown',
       loading: () => '...',
       error: (_, _) => 'Error',
@@ -566,80 +594,93 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
             ),
           ),
         Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        children: [
-          // ─── Header row (always visible) ──────────────
-          InkWell(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(14),
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  const Icon(Icons.drag_handle_rounded,
-                      color: AppColors.textMuted, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          exerciseName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: Column(
+            children: [
+              // ─── Header row (always visible) ──────────────
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.drag_handle_rounded,
+                        color: AppColors.textMuted,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              exerciseName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${_sets.length} sets × ${_sets.isNotEmpty ? _sets.first.reps : 0} reps'
+                              '${_sets.isNotEmpty && _sets.first.weight > 0 ? ' @ ${Formatters.weight(_sets.first.weight, useLbs: useLbs)}' : ''}',
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '${_sets.length} sets × ${_sets.isNotEmpty ? _sets.first.reps : 0} reps'
-                          '${_sets.isNotEmpty && _sets.first.weight > 0 ? ' @ ${Formatters.weight(_sets.first.weight, useLbs: useLbs)}' : ''}',
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
-                          ),
+                      ),
+                      _UnitToggle(
+                        useLbs: useLbs,
+                        onChanged: widget.onUseLbsChanged,
+                      ),
+                      AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: const Icon(
+                          Icons.expand_more_rounded,
+                          color: AppColors.textMuted,
+                          size: 22,
                         ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        onPressed: widget.onDelete,
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: AppColors.textMuted,
+                          size: 18,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
                   ),
-                  _UnitToggle(
-                    useLbs: useLbs,
-                    onChanged: widget.onUseLbsChanged,
-                  ),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more_rounded,
-                        color: AppColors.textMuted, size: 22),
-                  ),
-                  IconButton(
-                    onPressed: widget.onDelete,
-                    icon: const Icon(Icons.close_rounded,
-                        color: AppColors.textMuted, size: 18),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
 
-          // ─── Expanded per-set editing ────────────────
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: _buildSetEditor(useLbs),
-            crossFadeState:
-                _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 250),
+              // ─── Expanded per-set editing ────────────────
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: _buildSetEditor(useLbs),
+                crossFadeState: _expanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 250),
+              ),
+            ],
           ),
-        ],
-      ),
-    ),
+        ),
       ],
     );
   }
@@ -660,15 +701,24 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
               decoration: InputDecoration(
                 filled: true,
                 fillColor: AppColors.surfaceLight,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
                 ),
                 hintText: 'Section (optional)',
-                hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                prefixIcon: const Icon(Icons.label_outline_rounded,
-                    color: AppColors.textMuted, size: 18),
+                hintStyle: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13,
+                ),
+                prefixIcon: const Icon(
+                  Icons.label_outline_rounded,
+                  color: AppColors.textMuted,
+                  size: 18,
+                ),
                 isDense: true,
               ),
               style: const TextStyle(fontSize: 13),
@@ -684,15 +734,24 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
               decoration: InputDecoration(
                 filled: true,
                 fillColor: AppColors.surfaceLight,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
                 ),
                 hintText: 'Notes (optional)',
-                hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                prefixIcon: const Icon(Icons.notes_rounded,
-                    color: AppColors.textMuted, size: 18),
+                hintStyle: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13,
+                ),
+                prefixIcon: const Icon(
+                  Icons.notes_rounded,
+                  color: AppColors.textMuted,
+                  size: 18,
+                ),
                 isDense: true,
               ),
               style: const TextStyle(fontSize: 13),
@@ -706,16 +765,23 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
             child: Row(
               children: [
                 const SizedBox(
-                    width: 36,
-                    child: Text('SET', style: _routineHeaderStyle)),
+                  width: 36,
+                  child: Text('SET', style: _routineHeaderStyle),
+                ),
                 Expanded(
-                    child: Text(useLbs ? 'LBS' : 'KG',
-                        style: _routineHeaderStyle,
-                        textAlign: TextAlign.center)),
+                  child: Text(
+                    useLbs ? 'LBS' : 'KG',
+                    style: _routineHeaderStyle,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
                 const Expanded(
-                    child: Text('REPS',
-                        style: _routineHeaderStyle,
-                        textAlign: TextAlign.center)),
+                  child: Text(
+                    'REPS',
+                    style: _routineHeaderStyle,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
                 const SizedBox(width: 36),
               ],
             ),
@@ -759,8 +825,10 @@ class _RoutineExerciseItemState extends ConsumerState<_RoutineExerciseItem> {
                 children: [
                   Icon(Icons.add_rounded, color: AppColors.textMuted, size: 16),
                   SizedBox(width: 4),
-                  Text('Add Set',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  Text(
+                    'Add Set',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  ),
                 ],
               ),
             ),
@@ -820,12 +888,11 @@ class _RoutineSetRowState extends State<_RoutineSetRow> {
   @override
   void initState() {
     super.initState();
-    _weightCtrl =
-        TextEditingController(text: _formatWeight(widget.setData.weight));
+    _weightCtrl = TextEditingController(
+      text: _formatWeight(widget.setData.weight),
+    );
     _repsCtrl = TextEditingController(
-      text: widget.setData.reps > 0
-          ? widget.setData.reps.toString()
-          : '',
+      text: widget.setData.reps > 0 ? widget.setData.reps.toString() : '',
     );
   }
 
@@ -877,8 +944,9 @@ class _RoutineSetRowState extends State<_RoutineSetRow> {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: TextField(
                 controller: _weightCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppColors.textPrimary,
@@ -889,7 +957,9 @@ class _RoutineSetRowState extends State<_RoutineSetRow> {
                   filled: true,
                   fillColor: AppColors.surfaceLight,
                   contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 8),
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -923,7 +993,9 @@ class _RoutineSetRowState extends State<_RoutineSetRow> {
                   filled: true,
                   fillColor: AppColors.surfaceLight,
                   contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 8),
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -944,8 +1016,11 @@ class _RoutineSetRowState extends State<_RoutineSetRow> {
             child: widget.canRemove
                 ? GestureDetector(
                     onTap: widget.onRemove,
-                    child: const Icon(Icons.remove_circle_outline_rounded,
-                        color: AppColors.textMuted, size: 18),
+                    child: const Icon(
+                      Icons.remove_circle_outline_rounded,
+                      color: AppColors.textMuted,
+                      size: 18,
+                    ),
                   )
                 : const SizedBox.shrink(),
           ),

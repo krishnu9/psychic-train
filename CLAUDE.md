@@ -72,11 +72,3 @@ python3 -m venv .venv
 **Incremental update:** `/graphify lib/ --update` — re-extracts only changed files.
 **Graph output:** `graphify-out/graph.html` (open in browser), `graphify-out/GRAPH_REPORT.md`.
 
-## Planned features (PLAN.md)
-
-1. Markdown support for routine descriptions
-2. Exercise descriptions
-3. ~~Persist active workout across app restarts/refreshes~~ ✓ Done
-4. Categories/sections within routine exercises
-5. ~~New Exercise Addition option in exercise picker~~ ✓ Done
-6. ~~Global vs personal exercise list~~ ✓ Done

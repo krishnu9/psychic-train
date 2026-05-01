@@ -60,7 +60,7 @@ app.*.map.json
 .cursor/
 
 # Graphify
-graphify-out/cache/
+graphify-out/
 
 # Firebase
 .firebase/

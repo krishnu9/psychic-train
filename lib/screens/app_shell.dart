@@ -53,9 +53,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Incomplete Workout'),
         content: const Text(
           'You have an unfinished workout. Would you like to resume or discard it?',
@@ -63,8 +61,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Discard',
-                style: TextStyle(color: AppColors.error)),
+            child: Text('Discard', style: TextStyle(color: AppColors.error)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -93,17 +90,18 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     ref.listen(authStateProvider, (prev, next) {
       if (next.valueOrNull?.session != null) {
-          final syncService = ref.read(syncServiceProvider);
-          syncService.syncDown().then((_) {
-            syncService.syncAll();
-          });
-        }
-      },
-    );
+        final syncService = ref.read(syncServiceProvider);
+        syncService.syncDown().then((_) {
+          syncService.syncAll();
+        });
+      }
+    });
     // Listen for incomplete workouts to prompt resume
     ref.listen<AsyncValue<Workout?>>(incompleteWorkoutProvider, (prev, next) {
       final workout = next.valueOrNull;
-      if (workout != null && !_hasPromptedResume && prev?.isLoading == true &&
+      if (workout != null &&
+          !_hasPromptedResume &&
+          prev?.isLoading == true &&
           !ref.read(workoutMinimizedProvider)) {
         _hasPromptedResume = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -120,24 +118,17 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (!isAuthenticated) return const AuthScreen();
 
     return Scaffold(
-      body: Stack(
+      body: IndexedStack(index: _currentIndex, children: _screens),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IndexedStack(
-            index: _currentIndex,
-            children: _screens,
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 84, // above the floating nav bar
-            child: const MinimizedWorkoutBar(),
+          const MinimizedWorkoutBar(),
+          _FloatingNavBar(
+            currentIndex: _currentIndex,
+            items: _navItems,
+            onTap: (i) => setState(() => _currentIndex = i),
           ),
         ],
-      ),
-      bottomNavigationBar: _FloatingNavBar(
-        currentIndex: _currentIndex,
-        items: _navItems,
-        onTap: (i) => setState(() => _currentIndex = i),
       ),
     );
   }
@@ -166,6 +157,7 @@ class _FloatingNavBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
         child: Container(
+          key: const Key('floating_nav_bar'),
           height: 64,
           decoration: BoxDecoration(
             color: AppColors.surfaceBright,
@@ -193,7 +185,10 @@ class _FloatingNavBar extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeInOut,
-                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: selected
                           ? AppColors.primary.withValues(alpha: 0.15)
