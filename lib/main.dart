@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,11 +20,26 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  // Initialise notifications (requests permissions on first run)
-  await LocalNotificationService().initialize();
+  // Initialise notifications (requests permissions on first run). Notification
+  // setup should never prevent the app from showing its first screen.
+  try {
+    await LocalNotificationService().initialize();
+  } catch (error, stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'app startup',
+        context: ErrorDescription('while initializing local notifications'),
+      ),
+    );
+    debugPrint('Local notifications failed to initialize: $error');
+  }
 
-  runApp(ProviderScope(
-    overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-    child: const GymApp(),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: const GymApp(),
+    ),
+  );
 }

@@ -4,8 +4,10 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 
 abstract class NotificationService {
   Future<void> initialize();
-  Future<void> scheduleWorkoutOverdueAlert(int workoutId,
-      {required DateTime startTime});
+  Future<void> scheduleWorkoutOverdueAlert(
+    int workoutId, {
+    required DateTime startTime,
+  });
   Future<void> cancelWorkoutAlert(int workoutId);
 }
 
@@ -17,8 +19,10 @@ class NullNotificationService implements NotificationService {
   Future<void> initialize() async {}
 
   @override
-  Future<void> scheduleWorkoutOverdueAlert(int workoutId,
-      {required DateTime startTime}) async {}
+  Future<void> scheduleWorkoutOverdueAlert(
+    int workoutId, {
+    required DateTime startTime,
+  }) async {}
 
   @override
   Future<void> cancelWorkoutAlert(int workoutId) async {}
@@ -37,7 +41,7 @@ class LocalNotificationService implements NotificationService {
   Future<void> initialize() async {
     tz_data.initializeTimeZones();
 
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('@mipmap/launcher_icon');
     const ios = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: false,
@@ -50,13 +54,16 @@ class LocalNotificationService implements NotificationService {
     // Request permissions on Android 13+
     await _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestNotificationsPermission();
   }
 
   @override
-  Future<void> scheduleWorkoutOverdueAlert(int workoutId,
-      {required DateTime startTime}) async {
+  Future<void> scheduleWorkoutOverdueAlert(
+    int workoutId, {
+    required DateTime startTime,
+  }) async {
     final fireAt = startTime.add(const Duration(minutes: _overdueMinutes));
     if (fireAt.isBefore(DateTime.now())) return;
 
