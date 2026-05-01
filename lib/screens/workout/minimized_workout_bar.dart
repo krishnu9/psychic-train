@@ -56,7 +56,10 @@ class _MinimizedWorkoutBarContentState
   void initState() {
     super.initState();
     _updateElapsed();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateElapsed());
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _updateElapsed(),
+    );
   }
 
   void _updateElapsed() {
@@ -87,32 +90,35 @@ class _MinimizedWorkoutBarContentState
 
   @override
   Widget build(BuildContext context) {
-    final exercisesAsync =
-        ref.watch(workoutExercisesProvider(widget.workoutId));
-    final exerciseCount =
-        exercisesAsync.valueOrNull?.length ?? 0;
+    final exercisesAsync = ref.watch(
+      workoutExercisesProvider(widget.workoutId),
+    );
+    final exerciseCount = exercisesAsync.valueOrNull?.length ?? 0;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _expand(context),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+        margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.primary,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: AppColors.primary.withValues(alpha: 0.24),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Row(
           children: [
-            const Icon(Icons.fitness_center_rounded,
-                color: Colors.white, size: 18),
+            const Icon(
+              Icons.fitness_center_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -129,10 +135,7 @@ class _MinimizedWorkoutBarContentState
                   ),
                   Text(
                     '$_elapsed · $exerciseCount exercise${exerciseCount == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 ],
               ),
@@ -146,8 +149,11 @@ class _MinimizedWorkoutBarContentState
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_up_rounded,
-                color: Colors.white, size: 20),
+            const Icon(
+              Icons.keyboard_arrow_up_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
           ],
         ),
       ),

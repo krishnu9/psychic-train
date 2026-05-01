@@ -19,34 +19,31 @@ class MockWorkoutRepository extends Mock implements WorkoutRepository {}
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 Workout _activeWorkout() => Workout(
-      id: 42,
-      clientId: 'active-workout',
-      routineId: null,
-      startTime: DateTime.now().subtract(const Duration(minutes: 20)),
-      endTime: null,
-      notes: '',
-      lastModifiedAt: DateTime.now(),
-      syncStatus: 1,
-      isDeleted: false,
-    );
+  id: 42,
+  clientId: 'active-workout',
+  routineId: null,
+  startTime: DateTime.now().subtract(const Duration(minutes: 20)),
+  endTime: null,
+  notes: '',
+  lastModifiedAt: DateTime.now(),
+  syncStatus: 1,
+  isDeleted: false,
+);
 
 List<Override> _baseOverrides({
   required Workout? activeWorkout,
   required bool minimized,
-}) =>
-    [
-      routinesProvider.overrideWith((ref) => Stream.value([])),
-      exercisesProvider.overrideWith((ref) => Stream.value([])),
-      workoutsThisWeekProvider.overrideWith((ref) => Stream.value(0)),
-      totalWorkoutsProvider.overrideWith((ref) => Stream.value(0)),
-      isAuthenticatedProvider.overrideWith((ref) => true),
-      authStateProvider.overrideWith((ref) => const Stream.empty()),
-      syncServiceProvider.overrideWithValue(MockSyncService()),
-      incompleteWorkoutProvider.overrideWith(
-        (ref) => Stream.value(activeWorkout),
-      ),
-      workoutMinimizedProvider.overrideWith((ref) => minimized),
-    ];
+}) => [
+  routinesProvider.overrideWith((ref) => Stream.value([])),
+  exercisesProvider.overrideWith((ref) => Stream.value([])),
+  workoutsThisWeekProvider.overrideWith((ref) => Stream.value(0)),
+  totalWorkoutsProvider.overrideWith((ref) => Stream.value(0)),
+  isAuthenticatedProvider.overrideWith((ref) => true),
+  authStateProvider.overrideWith((ref) => const Stream.empty()),
+  syncServiceProvider.overrideWithValue(MockSyncService()),
+  incompleteWorkoutProvider.overrideWith((ref) => Stream.value(activeWorkout)),
+  workoutMinimizedProvider.overrideWith((ref) => minimized),
+];
 
 // ─── Provider unit tests ──────────────────────────────────────────────────────
 
@@ -80,8 +77,9 @@ void main() {
   // ── Widget tests: minimized bar visibility ────────────────────────────────
 
   group('AppShell — minimized workout bar', () {
-    testWidgets('minimized bar is hidden when workout is not minimized',
-        (tester) async {
+    testWidgets('minimized bar is hidden when workout is not minimized', (
+      tester,
+    ) async {
       await tester.pumpApp(
         const AppShell(),
         overrides: _baseOverrides(
@@ -96,7 +94,9 @@ void main() {
       expect(find.byKey(const Key('minimized_workout_bar')), findsNothing);
     });
 
-    testWidgets('minimized bar appears when workout is minimized', (tester) async {
+    testWidgets('minimized bar appears when workout is minimized', (
+      tester,
+    ) async {
       await tester.pumpApp(
         const AppShell(),
         overrides: _baseOverrides(
@@ -111,8 +111,31 @@ void main() {
       expect(find.byKey(const Key('minimized_workout_bar')), findsOneWidget);
     });
 
-    testWidgets('minimized bar is hidden when there is no active workout',
-        (tester) async {
+    testWidgets('minimized bar is docked above the bottom nav', (tester) async {
+      await tester.pumpApp(
+        const AppShell(),
+        overrides: _baseOverrides(
+          activeWorkout: _activeWorkout(),
+          minimized: true,
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final barTop = tester
+          .getTopLeft(find.byKey(const Key('minimized_workout_bar')))
+          .dy;
+      final navTop = tester
+          .getTopLeft(find.byKey(const Key('floating_nav_bar')))
+          .dy;
+
+      expect(barTop, lessThan(navTop));
+    });
+
+    testWidgets('minimized bar is hidden when there is no active workout', (
+      tester,
+    ) async {
       await tester.pumpApp(
         const AppShell(),
         overrides: _baseOverrides(activeWorkout: null, minimized: true),
@@ -126,35 +149,44 @@ void main() {
     });
 
     testWidgets(
-        'tapping minimized bar navigates to active workout and hides the bar',
-        (tester) async {
-      final mockRepo = MockWorkoutRepository();
-      when(() => mockRepo.watchWorkoutExercises(any())).thenAnswer((_) => Stream.value([]));
-      when(() => mockRepo.watchSets(any())).thenAnswer((_) => Stream.value([]));
-      when(() => mockRepo.getById(any())).thenAnswer((_) async => null);
-      when(() => mockRepo.getSets(any())).thenAnswer((_) async => []);
-      when(() => mockRepo.getWorkoutExercises(any())).thenAnswer((_) async => []);
+      'tapping minimized bar navigates to active workout and hides the bar',
+      (tester) async {
+        final mockRepo = MockWorkoutRepository();
+        when(
+          () => mockRepo.watchWorkoutExercises(any()),
+        ).thenAnswer((_) => Stream.value([]));
+        when(
+          () => mockRepo.watchSets(any()),
+        ).thenAnswer((_) => Stream.value([]));
+        when(() => mockRepo.getById(any())).thenAnswer((_) async => null);
+        when(() => mockRepo.getSets(any())).thenAnswer((_) async => []);
+        when(
+          () => mockRepo.getWorkoutExercises(any()),
+        ).thenAnswer((_) async => []);
 
-      await tester.pumpApp(
-        const AppShell(),
-        overrides: [
-          ..._baseOverrides(activeWorkout: _activeWorkout(), minimized: true),
-          workoutRepositoryProvider.overrideWithValue(mockRepo),
-          workoutsProvider.overrideWith((ref) => Stream.value([])),
-        ],
-      );
+        await tester.pumpApp(
+          const AppShell(),
+          overrides: [
+            ..._baseOverrides(activeWorkout: _activeWorkout(), minimized: true),
+            workoutRepositoryProvider.overrideWithValue(mockRepo),
+            workoutsProvider.overrideWith((ref) => Stream.value([])),
+          ],
+        );
 
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      await tester.tap(find.byKey(const Key('minimized_workout_bar')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('minimized_workout_bar')));
+        await tester.pumpAndSettle();
 
-      // After navigation the bar should be gone (minimized state resets to false)
-      expect(find.byKey(const Key('minimized_workout_bar')), findsNothing);
-    });
+        // After navigation the bar should be gone (minimized state resets to false)
+        expect(find.byKey(const Key('minimized_workout_bar')), findsNothing);
+      },
+    );
 
-    testWidgets('minimized bar disappears when workout is finished', (tester) async {
+    testWidgets('minimized bar disappears when workout is finished', (
+      tester,
+    ) async {
       final workoutController = StreamController<Workout?>.broadcast();
       workoutController.add(_activeWorkout());
 

@@ -1,20 +1,30 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gymapp/database/app_database.dart';
+import 'package:gymapp/providers/providers.dart';
 import 'package:gymapp/repositories/repositories.dart';
+import 'package:gymapp/screens/workout/active_workout_screen.dart';
 import 'package:gymapp/services/sync_service.dart';
+import '../helpers/pump_app.dart';
 
 // ─── Fake sync ────────────────────────────────────────────────────────────────
 
 class FakeSyncService extends SyncService {
   FakeSyncService(super.db);
-  @override Future<bool> pushExercise(Exercise e) async => true;
-  @override Future<bool> pushRoutine(Routine r) async => true;
-  @override Future<bool> pushRoutineExercise(RoutineExerciseEntry re) async => true;
-  @override Future<bool> pushWorkout(Workout w) async => true;
-  @override Future<bool> pushLoggedSet(LoggedSet s) async => true;
-  @override Future<void> syncAll() async {}
+  @override
+  Future<bool> pushExercise(Exercise e) async => true;
+  @override
+  Future<bool> pushRoutine(Routine r) async => true;
+  @override
+  Future<bool> pushRoutineExercise(RoutineExerciseEntry re) async => true;
+  @override
+  Future<bool> pushWorkout(Workout w) async => true;
+  @override
+  Future<bool> pushLoggedSet(LoggedSet s) async => true;
+  @override
+  Future<void> syncAll() async {}
 }
 
 // ─── Repository tests ─────────────────────────────────────────────────────────
@@ -35,53 +45,83 @@ void main() {
   tearDown(() async => db.close());
 
   group('WorkoutRepository — reorder exercises', () {
-    test('reorderWorkoutExercises updates displayOrder for all entries', () async {
-      final workoutId = await workoutRepo.start();
-      final exercises = await exerciseRepo.getAll();
-      final benchId = exercises.firstWhere((e) => e.name.contains('Bench')).id;
-      final sqId = exercises.firstWhere((e) => e.name.contains('Squat')).id;
-      final dlId = exercises.firstWhere((e) => e.name.contains('Deadlift')).id;
+    test(
+      'reorderWorkoutExercises updates displayOrder for all entries',
+      () async {
+        final workoutId = await workoutRepo.start();
+        final exercises = await exerciseRepo.getAll();
+        final benchId = exercises
+            .firstWhere((e) => e.name.contains('Bench'))
+            .id;
+        final sqId = exercises.firstWhere((e) => e.name.contains('Squat')).id;
+        final dlId = exercises
+            .firstWhere((e) => e.name.contains('Deadlift'))
+            .id;
 
-      // Insert in order: Bench(0), Squat(1), Deadlift(2)
-      await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId, exerciseId: benchId, displayOrder: 0);
-      await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId, exerciseId: sqId, displayOrder: 1);
-      await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId, exerciseId: dlId, displayOrder: 2);
+        // Insert in order: Bench(0), Squat(1), Deadlift(2)
+        await workoutRepo.upsertWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: benchId,
+          displayOrder: 0,
+        );
+        await workoutRepo.upsertWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: sqId,
+          displayOrder: 1,
+        );
+        await workoutRepo.upsertWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: dlId,
+          displayOrder: 2,
+        );
 
-      // Reverse the order: Deadlift, Squat, Bench
-      await workoutRepo.reorderWorkoutExercises(
-          workoutId, [dlId, sqId, benchId]);
+        // Reverse the order: Deadlift, Squat, Bench
+        await workoutRepo.reorderWorkoutExercises(workoutId, [
+          dlId,
+          sqId,
+          benchId,
+        ]);
 
-      final entries = await workoutRepo.getWorkoutExercises(workoutId);
-      // Sort by displayOrder to check positions
-      entries.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+        final entries = await workoutRepo.getWorkoutExercises(workoutId);
+        // Sort by displayOrder to check positions
+        entries.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
 
-      expect(entries[0].exerciseId, dlId);
-      expect(entries[1].exerciseId, sqId);
-      expect(entries[2].exerciseId, benchId);
-    });
+        expect(entries[0].exerciseId, dlId);
+        expect(entries[1].exerciseId, sqId);
+        expect(entries[2].exerciseId, benchId);
+      },
+    );
 
-    test('reorder assigns sequential displayOrder values starting at 0', () async {
-      final workoutId = await workoutRepo.start();
-      final exercises = await exerciseRepo.getAll();
-      final benchId = exercises.firstWhere((e) => e.name.contains('Bench')).id;
-      final sqId = exercises.firstWhere((e) => e.name.contains('Squat')).id;
+    test(
+      'reorder assigns sequential displayOrder values starting at 0',
+      () async {
+        final workoutId = await workoutRepo.start();
+        final exercises = await exerciseRepo.getAll();
+        final benchId = exercises
+            .firstWhere((e) => e.name.contains('Bench'))
+            .id;
+        final sqId = exercises.firstWhere((e) => e.name.contains('Squat')).id;
 
-      await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId, exerciseId: benchId, displayOrder: 0);
-      await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId, exerciseId: sqId, displayOrder: 1);
+        await workoutRepo.upsertWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: benchId,
+          displayOrder: 0,
+        );
+        await workoutRepo.upsertWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: sqId,
+          displayOrder: 1,
+        );
 
-      await workoutRepo.reorderWorkoutExercises(workoutId, [sqId, benchId]);
+        await workoutRepo.reorderWorkoutExercises(workoutId, [sqId, benchId]);
 
-      final entries = await workoutRepo.getWorkoutExercises(workoutId);
-      entries.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+        final entries = await workoutRepo.getWorkoutExercises(workoutId);
+        entries.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
 
-      expect(entries[0].displayOrder, 0);
-      expect(entries[1].displayOrder, 1);
-    });
+        expect(entries[0].displayOrder, 0);
+        expect(entries[1].displayOrder, 1);
+      },
+    );
 
     test('reorder only affects exercises within the given workout', () async {
       final workoutId1 = await workoutRepo.start();
@@ -92,9 +132,15 @@ void main() {
 
       // Bench in workout 1, Squat in workout 2
       await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId1, exerciseId: benchId, displayOrder: 0);
+        workoutId: workoutId1,
+        exerciseId: benchId,
+        displayOrder: 0,
+      );
       await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId2, exerciseId: sqId, displayOrder: 0);
+        workoutId: workoutId2,
+        exerciseId: sqId,
+        displayOrder: 0,
+      );
 
       // Reorder workout 1
       await workoutRepo.reorderWorkoutExercises(workoutId1, [benchId]);
@@ -105,39 +151,138 @@ void main() {
       expect(w2Entries.first.exerciseId, sqId);
     });
 
-    test('new exercise appended after reorder gets highest displayOrder', () async {
-      final workoutId = await workoutRepo.start();
-      final exercises = await exerciseRepo.getAll();
-      final benchId = exercises.firstWhere((e) => e.name.contains('Bench')).id;
-      final sqId = exercises.firstWhere((e) => e.name.contains('Squat')).id;
-      final dlId = exercises.firstWhere((e) => e.name.contains('Deadlift')).id;
+    test(
+      'new exercise appended after reorder gets highest displayOrder',
+      () async {
+        final workoutId = await workoutRepo.start();
+        final exercises = await exerciseRepo.getAll();
+        final benchId = exercises
+            .firstWhere((e) => e.name.contains('Bench'))
+            .id;
+        final sqId = exercises.firstWhere((e) => e.name.contains('Squat')).id;
+        final dlId = exercises
+            .firstWhere((e) => e.name.contains('Deadlift'))
+            .id;
 
-      await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId, exerciseId: benchId, displayOrder: 0);
-      await workoutRepo.upsertWorkoutExercise(
-          workoutId: workoutId, exerciseId: sqId, displayOrder: 1);
+        await workoutRepo.upsertWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: benchId,
+          displayOrder: 0,
+        );
+        await workoutRepo.upsertWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: sqId,
+          displayOrder: 1,
+        );
 
-      // Add a new exercise mid-workout (should be appended at index 2)
-      await workoutRepo.appendWorkoutExercise(
-          workoutId: workoutId, exerciseId: dlId);
+        // Add a new exercise mid-workout (should be appended at index 2)
+        await workoutRepo.appendWorkoutExercise(
+          workoutId: workoutId,
+          exerciseId: dlId,
+        );
 
-      final entries = await workoutRepo.getWorkoutExercises(workoutId);
-      entries.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+        final entries = await workoutRepo.getWorkoutExercises(workoutId);
+        entries.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
 
-      expect(entries.last.exerciseId, dlId);
-      expect(entries.last.displayOrder, 2);
-    });
+        expect(entries.last.exerciseId, dlId);
+        expect(entries.last.displayOrder, 2);
+      },
+    );
   });
 
   // ── Widget smoke test ────────────────────────────────────────────────────
 
   group('Active Workout Screen — reorderable list', () {
-    testWidgets('ReorderableListView is present in active workout screen',
-        (tester) async {
+    testWidgets('ReorderableListView is present in active workout screen', (
+      tester,
+    ) async {
       // This test verifies the widget tree contains a ReorderableListView.
       // Full drag-gesture testing requires integration tests with a real device.
       // A focused widget test is left here as a structure checkpoint.
       expect(ReorderableListView, isNotNull); // smoke check
     });
+
+    testWidgets('shows add-exercise footer when keyboard is closed', (
+      tester,
+    ) async {
+      final fixture = await _activeWorkoutFixture();
+      addTearDown(fixture.db.close);
+
+      await tester.pumpApp(
+        ActiveWorkoutScreen(workoutId: fixture.workoutId),
+        overrides: fixture.overrides,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReorderableListView), findsOneWidget);
+      expect(find.text('Add Exercise'), findsOneWidget);
+    });
+
+    testWidgets('hides add-exercise footer when keyboard is open', (
+      tester,
+    ) async {
+      final fixture = await _activeWorkoutFixture();
+      addTearDown(fixture.db.close);
+
+      await tester.pumpApp(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(390, 844),
+            viewInsets: EdgeInsets.only(bottom: 320),
+          ),
+          child: ActiveWorkoutScreen(workoutId: fixture.workoutId),
+        ),
+        overrides: fixture.overrides,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReorderableListView), findsOneWidget);
+      expect(find.text('Add Exercise'), findsNothing);
+    });
   });
+}
+
+class _ActiveWorkoutFixture {
+  final AppDatabase db;
+  final int workoutId;
+  final List<Override> overrides;
+
+  _ActiveWorkoutFixture({
+    required this.db,
+    required this.workoutId,
+    required this.overrides,
+  });
+}
+
+Future<_ActiveWorkoutFixture> _activeWorkoutFixture() async {
+  final db = AppDatabase(NativeDatabase.memory());
+  final sync = FakeSyncService(db);
+  final exerciseRepo = ExerciseRepository(db, sync);
+  final workoutRepo = WorkoutRepository(db, sync);
+
+  final exercises = await exerciseRepo.getAll();
+  final bench = exercises.firstWhere((e) => e.name.contains('Bench'));
+  final workoutId = await workoutRepo.start();
+  await workoutRepo.upsertWorkoutExercise(
+    workoutId: workoutId,
+    exerciseId: bench.id,
+  );
+  await workoutRepo.logSet(
+    workoutId: workoutId,
+    exerciseId: bench.id,
+    setNumber: 1,
+    weight: 60,
+    reps: 8,
+  );
+
+  return _ActiveWorkoutFixture(
+    db: db,
+    workoutId: workoutId,
+    overrides: [
+      databaseProvider.overrideWithValue(db),
+      syncServiceProvider.overrideWithValue(sync),
+      exerciseRepositoryProvider.overrideWithValue(exerciseRepo),
+      workoutRepositoryProvider.overrideWithValue(workoutRepo),
+    ],
+  );
 }
