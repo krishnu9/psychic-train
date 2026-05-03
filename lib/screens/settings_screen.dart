@@ -7,6 +7,63 @@ import '../services/supabase_service.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
+    final activeWorkout = ref.read(incompleteWorkoutProvider).valueOrNull;
+    if (activeWorkout != null) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Active workout in progress'),
+          content: const Text(
+            'Logging out will discard your current workout. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Logout'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
+    if (!context.mounted) return;
+    final db = ref.read(databaseProvider);
+    final syncService = ref.read(syncServiceProvider);
+    final prefs = ref.read(sharedPreferencesProvider);
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
+    var dialogOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    ).whenComplete(() => dialogOpen = false);
+
+    try {
+      await syncService
+          .syncAll()
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
+      await db.wipeUserData();
+      await prefs.remove('last_user_id');
+      ref.read(workoutMinimizedProvider.notifier).state = false;
+    } finally {
+      if (dialogOpen) rootNavigator.pop();
+    }
+    await SupabaseService.signOut();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final useLbs = ref.watch(useLbsProvider);
@@ -46,9 +103,7 @@ class SettingsScreen extends ConsumerWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  onTap: () async {
-                    await SupabaseService.signOut();
-                  },
+                  onTap: () => _handleLogout(context, ref),
                 ),
               ],
             ),

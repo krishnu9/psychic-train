@@ -633,6 +633,24 @@ class AppDatabase extends _$AppDatabase {
     return query.map((row) => row.read(countExp) ?? 0).watchSingle();
   }
 
+  // ─── User data wipe ────────────────────────────────────────────────────────
+
+  /// Deletes all user-owned rows so a different user can sign in without
+  /// seeing the previous user's data. Global seed exercises (isCustom=false)
+  /// are kept and re-flagged as pending so they push to Supabase under the
+  /// new user's account on the next syncAll().
+  Future<void> wipeUserData() => transaction(() async {
+        await delete(loggedSets).go();
+        await delete(workoutExercises).go();
+        await delete(workouts).go();
+        await delete(routineExercises).go();
+        await delete(routines).go();
+        await (delete(exercises)..where((e) => e.isCustom.equals(true))).go();
+        await (update(exercises)..where((e) => e.isCustom.equals(false))).write(
+              const ExercisesCompanion(syncStatus: Value(1)),
+            );
+      });
+
   // ─── Seed data ─────────────────────────────────────────────────────────────
 
   Future<void> _seedExercises() async {

@@ -327,8 +327,11 @@ final isAuthenticatedProvider = Provider<bool>((ref) {
 });
 
 final userEmailProvider = Provider<String>((ref) {
+  final session = ref.watch(authStateProvider).valueOrNull?.session;
   try {
-    return SupabaseService.currentUser?.email ?? 'Not logged in';
+    return session?.user.email ??
+        SupabaseService.currentUser?.email ??
+        'Not logged in';
   } catch (_) {
     return 'test@example.com'; // for tests
   }

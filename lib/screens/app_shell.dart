@@ -88,13 +88,20 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(authStateProvider, (prev, next) {
-      if (next.valueOrNull?.session != null) {
-        final syncService = ref.read(syncServiceProvider);
-        syncService.syncDown().then((_) {
-          syncService.syncAll();
-        });
+    ref.listen(authStateProvider, (prev, next) async {
+      final session = next.valueOrNull?.session;
+      if (session == null) return;
+      final prefs = ref.read(sharedPreferencesProvider);
+      final lastUserId = prefs.getString('last_user_id');
+      final currentUserId = session.user.id;
+      if (lastUserId != null && lastUserId != currentUserId) {
+        await ref.read(databaseProvider).wipeUserData();
+        ref.read(workoutMinimizedProvider.notifier).state = false;
       }
+      await prefs.setString('last_user_id', currentUserId);
+      final syncService = ref.read(syncServiceProvider);
+      await syncService.syncDown();
+      await syncService.syncAll();
     });
     // Listen for incomplete workouts to prompt resume
     ref.listen<AsyncValue<Workout?>>(incompleteWorkoutProvider, (prev, next) {

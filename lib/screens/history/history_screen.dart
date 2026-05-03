@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/providers.dart';
 import '../../database/app_database.dart';
@@ -108,8 +107,8 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
     final duration = workout.endTime != null
         ? workout.endTime!.difference(workout.startTime)
         : Duration.zero;
-    final dateStr = DateFormat('EEE, MMM d').format(workout.startTime);
-    final timeStr = DateFormat('h:mm a').format(workout.startTime);
+    final dateStr = Formatters.dateTime(workout.startTime, 'EEE, MMM d');
+    final timeStr = Formatters.dateTime(workout.startTime, 'h:mm a');
 
     // Eagerly subscribe so sets are loaded before expansion
     ref.watch(workoutSetsProvider(workout.id));
@@ -149,7 +148,7 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    DateFormat('d').format(workout.startTime),
+                    Formatters.dateTime(workout.startTime, 'd'),
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w700,
@@ -158,7 +157,7 @@ class _WorkoutHistoryTileState extends ConsumerState<_WorkoutHistoryTile> {
                     ),
                   ),
                   Text(
-                    DateFormat('MMM').format(workout.startTime),
+                    Formatters.dateTime(workout.startTime, 'MMM'),
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontSize: 10,

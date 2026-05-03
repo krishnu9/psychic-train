@@ -616,50 +616,72 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
               .fold<double>(0, (s, set) => s + set.weight * set.reps),
     );
 
-    final confirmed = await showDialog<bool>(
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Finish Workout?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _SummaryRow(label: 'Duration', value: _elapsed),
-            _SummaryRow(label: 'Total Sets', value: '$totalSets'),
-            _SummaryRow(
-              label: 'Total Volume',
-              value: Formatters.volume(
-                totalVolume,
-                useLbs: ref.read(useLbsProvider),
+      barrierDismissible: false,
+      builder: (ctx) {
+        var isSaving = false;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Finish Workout?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SummaryRow(label: 'Duration', value: _elapsed),
+                _SummaryRow(label: 'Total Sets', value: '$totalSets'),
+                _SummaryRow(
+                  label: 'Total Volume',
+                  value: Formatters.volume(
+                    totalVolume,
+                    useLbs: ref.read(useLbsProvider),
+                  ),
+                ),
+                _SummaryRow(
+                  label: 'Exercises',
+                  value: '${_exerciseDataList.length}',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed:
+                    isSaving ? null : () => Navigator.pop(ctx, false),
+                child: const Text('Continue'),
               ),
-            ),
-            _SummaryRow(
-              label: 'Exercises',
-              value: '${_exerciseDataList.length}',
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Continue'),
+              ElevatedButton(
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        setDialogState(() => isSaving = true);
+                        await ref
+                            .read(workoutRepositoryProvider)
+                            .finish(widget.workoutId);
+                        ref.invalidate(workoutsThisWeekProvider);
+                        ref.invalidate(totalWorkoutsProvider);
+                        if (ctx.mounted) Navigator.pop(ctx, true);
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation(AppColors.background),
+                        ),
+                      )
+                    : const Text('Finish'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Finish'),
-          ),
-        ],
-      ),
+        );
+      },
     );
 
-    if (confirmed == true) {
-      await ref.read(workoutRepositoryProvider).finish(widget.workoutId);
-      // Invalidate stats
-      ref.invalidate(workoutsThisWeekProvider);
-      ref.invalidate(totalWorkoutsProvider);
-      if (mounted) Navigator.pop(context);
-    }
+    if (saved == true && mounted) Navigator.pop(context);
   }
 
   @override

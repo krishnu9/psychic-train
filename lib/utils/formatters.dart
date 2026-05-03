@@ -1,7 +1,14 @@
+import 'package:intl/intl.dart';
+
 import 'weight_conversions.dart';
 
 /// Formatting helpers for weights, durations, and dates.
 class Formatters {
+  /// Format a [DateTime] in the device's local timezone using [pattern].
+  static String dateTime(DateTime dt, String pattern) =>
+      DateFormat(pattern).format(dt.toLocal());
+
+
   /// Format a weight value (stored in kg) with unit suffix.
   /// When `useLbs` is true, the value is converted from kg to lbs.
   static String weight(double kgValue, {bool useLbs = false}) {

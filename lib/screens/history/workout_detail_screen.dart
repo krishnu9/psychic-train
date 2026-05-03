@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../database/app_database.dart';
 import '../../providers/providers.dart';
 import '../../theme/app_theme.dart';
@@ -349,7 +348,8 @@ class WorkoutDetailScreen extends ConsumerWidget {
               ?.name
           : null;
       title = routineName ?? 'Free Workout';
-      final date = DateFormat('EEE, MMM d · h:mm a').format(workout.startTime);
+      final date =
+          Formatters.dateTime(workout.startTime, 'EEE, MMM d · h:mm a');
       final duration = workout.endTime != null
           ? Formatters.duration(workout.endTime!.difference(workout.startTime))
           : '–';
