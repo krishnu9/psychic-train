@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 export 'package:drift/drift.dart' show Value;
 import '../database/app_database.dart';
@@ -315,7 +317,7 @@ class WorkoutRepository {
     await _notifications?.cancelWorkoutAlert(id);
     final w = await getById(id);
     if (w != null) {
-      _sync.syncAll();
+      unawaited(_sync.syncAll());
     }
   }
 

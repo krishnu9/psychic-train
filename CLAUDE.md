@@ -15,7 +15,10 @@ dart run build_runner build -d
 flutter run              # on connected device/emulator
 flutter run -d chrome    # web
 
-# Tests
+# Run a single test file
+flutter test test/features/edit_past_workout_test.dart
+
+# Run all tests
 flutter test
 
 # Lint
@@ -24,36 +27,77 @@ flutter analyze
 
 ## Architecture
 
-See `ARCHITECTURE.md` for full context. Summary of what matters for development:
-
 **Stack:** Flutter + Drift (SQLite ORM) + Riverpod + Supabase
 
-**Layer ordering:** UI screens → Riverpod providers (`lib/providers/providers.dart`) → Repositories (`lib/repositories/repositories.dart`) → Drift `AppDatabase` (`lib/database/app_database.dart`). Screens and providers never touch the database directly.
+**Layer ordering (strict — never skip):**
+```
+UI screens → providers (lib/providers/providers.dart)
+           → repositories (lib/repositories/repositories.dart)
+           → AppDatabase (lib/database/app_database.dart)
+```
+Screens and providers never touch `AppDatabase` directly.
+
+**Screens (lib/screens/):**
+- `app_shell.dart` — root shell: bottom nav (Home / Exercises / Routines / History / Settings), auth gate, crash-resume dialog
+- `auth/` — Supabase Google OAuth (redirect on web, native plugin on mobile)
+- `exercises/` — exercise list, picker sheet, create form (`showCreateExerciseSheet(context, ref)`)
+- `routines/` — routine list and editor (draft-based creation)
+- `workout/` — `active_workout_screen.dart` (gym mode) + `minimized_workout_bar.dart` (floating dock)
+- `history/` — workout history list and detail view
 
 **State management rules:**
-- Don't use `StatefulWidget` for data that needs to be shared. Use Riverpod `StateProvider` or `@riverpod` annotations.
-- Stream providers (`exercisesProvider`, `routinesProvider`, `workoutsProvider`) are backed by Drift `.watch()` queries — they auto-update on any DB write.
-- UI state lives in dedicated small providers (e.g. `useLbsProvider`).
-- `activeWorkoutIdProvider` is a **derived** `Provider<int?>` (not a `StateProvider`) — it reads from `incompleteWorkoutProvider` which watches for workouts where `endTime IS NULL`. Never write to it directly; starting or finishing a workout updates the DB and the provider auto-follows.
+- `StatefulWidget` is only for local UI state (animations, scroll controllers). Shared data → Riverpod.
+- Stream providers (`exercisesProvider`, `routinesProvider`, `workoutsProvider`) are backed by Drift `.watch()` — they auto-update on any DB write.
+- `activeWorkoutIdProvider` is a **derived** `Provider<int?>` — it reads `incompleteWorkoutProvider` (watches for `endTime IS NULL`). Never write to it; starting/finishing a workout updates the DB and the provider follows.
+- `sharedPreferencesProvider` must be overridden in `ProviderScope` at startup and in tests.
 
-**Code generation:** Drift and Riverpod both rely on `build_runner`. After any change to `lib/models/tables.dart` or any `@riverpod`-annotated code, run `dart run build_runner build -d` to regenerate `*.g.dart` files.
+**Code generation:** Drift and Riverpod both use `build_runner`. After changing `lib/models/tables.dart` or any `@riverpod`-annotated code, run `dart run build_runner build -d` to regenerate `*.g.dart` files.
 
 **Schema changes:**
 1. Edit table definitions in `lib/models/tables.dart`
-2. Increment `schemaVersion` in `lib/database/app_database.dart` and add a migration in `onUpgrade`
+2. Increment `schemaVersion` in `lib/database/app_database.dart` and add a migration block in `onUpgrade`
 3. Run code generation
 
-**Sync-ready columns:** Every Drift table has `clientId` (UUID), `lastModifiedAt`, `syncStatus` (0=synced, 1=pending, 2=conflict), and `isDeleted` (soft delete). Repositories are the intended injection point for future cloud sync logic — no UI changes needed when implementing sync.
+**Sync-ready columns:** Every Drift table has `clientId` (UUID), `lastModifiedAt`, `syncStatus` (0=synced, 1=pending, 2=conflict), and `isDeleted` (soft delete). All mutations go through repositories, which call `SyncService` immediately after writing locally. `syncAll()` retries pending records.
 
-**Active workout persistence:** On app launch, `AppShell` listens to `incompleteWorkoutProvider`. If an incomplete workout is found (e.g. after a crash), it prompts the user to resume or discard. `ActiveWorkoutScreen` restores elapsed time and already-logged sets from the DB on resume.
+**Key domain types (lib/models/tables.dart):**
+- `ExerciseCategories`, `EquipmentTypes` — static string constants for category/equipment values
+- `SetType` — int constants (0=Normal, 1=Warmup, 2=DropSet, 3=Failure) with a `label()` helper
+- Tables: `Exercises`, `Routines`, `RoutineExercises`, `WorkoutExercises`, `Workouts`, `LoggedSets`
+- `RoutineExercises.isDraft` — `true` while user is building a routine; drafts are excluded from the routines list and never pushed to sync until `RoutineRepository.commitDraft()` is called
 
-**Exercise filtering:** Exercises are split into global (seeded, `isCustom=false`) and personal (user-created, `isCustom=true`). Use `filteredExercisesProvider` (driven by `exerciseFilterModeProvider`) in screens that need filtering. `ExercisePickerSheet` uses local state for its filter mode to avoid side effects. Custom exercises can be deleted; global exercises cannot.
+**Exercise filtering:**
+- Global exercises: pre-seeded, `isCustom=false`, cannot be deleted
+- Personal exercises: user-created, `isCustom=true`, can be soft-deleted
+- `filteredExercisesProvider` driven by `exerciseFilterModeProvider` for list screens
+- `ExercisePickerSheet` uses its own local filter state to avoid side effects
 
-**Reusable exercise creation:** `lib/screens/exercises/exercise_create_form.dart` exports `showCreateExerciseSheet(context, ref)` which returns `Future<Exercise?>`. Use this anywhere an exercise needs to be created — it's used in both `ExerciseListScreen` and `ExercisePickerSheet`.
+**Notifications:** `NotificationService` is abstract. `LocalNotificationService` schedules a 90-minute overdue alert when a workout starts; `NullNotificationService` is the no-op used in tests. Override `notificationServiceProvider` in tests.
 
-**Auth:** Supabase handles auth. `AppShell` (`lib/screens/app_shell.dart`) gates all screens behind `isAuthenticatedProvider`; unauthenticated users see `AuthScreen`. Google OAuth uses redirect on web and native plugin on mobile.
+**Weight units:** Global toggle `useLbsProvider` (SharedPreferences). Per-exercise override via `RoutineExercises.useLbs` / `WorkoutExercises.useLbs` (nullable: `null` = follow global).
 
-**Environment:** Supabase credentials are loaded from `.env` via `flutter_dotenv`. This file is not committed to git.
+**Auth:** `AppShell` listens to `isAuthenticatedProvider`; unauthenticated users see `AuthScreen`. Supabase credentials come from `.env` (not committed).
+
+## Testing
+
+Tests use `NativeDatabase.memory()` for Drift, `mocktail` for mocks, and `pumpApp` from `test/helpers/pump_app.dart` for widget tests.
+
+```dart
+// DB test setup
+db = AppDatabase(NativeDatabase.memory());
+
+// Widget test — automatically overrides sharedPreferencesProvider
+await tester.pumpApp(MyWidget(), overrides: [
+  workoutRepositoryProvider.overrideWithValue(mockRepo),
+]);
+
+// Fake sync service (avoids real Supabase calls)
+class FakeSyncService extends SyncService {
+  FakeSyncService(super.db);
+  @override Future<bool> pushExercise(Exercise e) async => true;
+  // ... override all push* methods and syncAll()
+}
+```
 
 ## Graphify
 
@@ -71,4 +115,3 @@ python3 -m venv .venv
 **Usage in Claude Code:** `/graphify lib/` — builds/updates the graph from the Flutter source.
 **Incremental update:** `/graphify lib/ --update` — re-extracts only changed files.
 **Graph output:** `graphify-out/graph.html` (open in browser), `graphify-out/GRAPH_REPORT.md`.
-
