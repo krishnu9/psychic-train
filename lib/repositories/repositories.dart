@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart' show debugPrint;
 export 'package:drift/drift.dart' show Value;
 import '../database/app_database.dart';
 import '../services/sync_service.dart';
@@ -308,13 +309,21 @@ class WorkoutRepository {
         );
       }
     }
-    await _notifications?.scheduleWorkoutOverdueAlert(id, startTime: startTime);
+    try {
+      await _notifications?.scheduleWorkoutOverdueAlert(id, startTime: startTime);
+    } catch (e, st) {
+      debugPrint('scheduleWorkoutOverdueAlert failed: $e\n$st');
+    }
     return id;
   }
 
   Future<void> finish(int id, {String? notes}) async {
     await _db.finishWorkout(id, notes: notes);
-    await _notifications?.cancelWorkoutAlert(id);
+    try {
+      await _notifications?.cancelWorkoutAlert(id);
+    } catch (e, st) {
+      debugPrint('cancelWorkoutAlert failed: $e\n$st');
+    }
     final w = await getById(id);
     if (w != null) {
       unawaited(_sync.syncAll());
@@ -323,7 +332,11 @@ class WorkoutRepository {
 
   Future<void> delete(int id) async {
     await _db.softDeleteWorkout(id);
-    await _notifications?.cancelWorkoutAlert(id);
+    try {
+      await _notifications?.cancelWorkoutAlert(id);
+    } catch (e, st) {
+      debugPrint('cancelWorkoutAlert failed: $e\n$st');
+    }
     final w = await getById(id);
     if (w != null) {
       if (await _sync.pushWorkout(w)) await _db.markSynced('workouts', id);

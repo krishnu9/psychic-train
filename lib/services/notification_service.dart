@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -37,6 +39,8 @@ class LocalNotificationService implements NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
+  bool _recoveryAttempted = false;
+
   @override
   Future<void> initialize() async {
     tz_data.initializeTimeZones();
@@ -68,29 +72,57 @@ class LocalNotificationService implements NotificationService {
     if (fireAt.isBefore(DateTime.now())) return;
 
     final tzFire = tz.TZDateTime.from(fireAt, tz.local);
-
-    await _plugin.zonedSchedule(
-      workoutId,
-      'Still at it? 💪',
-      'Your workout has been running for $_overdueMinutes minutes. Time to wrap up!',
-      tzFire,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channelId,
-          _channelName,
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-        iOS: const DarwinNotificationDetails(),
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        importance: Importance.high,
+        priority: Priority.high,
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
+      iOS: const DarwinNotificationDetails(),
     );
+
+    try {
+      await _plugin.zonedSchedule(
+        workoutId,
+        'Still at it? 💪',
+        'Your workout has been running for $_overdueMinutes minutes. Time to wrap up!',
+        tzFire,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } on PlatformException catch (e, st) {
+      debugPrint('zonedSchedule failed: ${e.message}\n$st');
+      // Known issue: corrupt scheduled-notification state in SharedPreferences
+      // causes "Missing type parameter" on Android. Try a one-shot reset.
+      if (_recoveryAttempted) return;
+      _recoveryAttempted = true;
+      try {
+        await _plugin.cancelAll();
+        await _plugin.zonedSchedule(
+          workoutId,
+          'Still at it? 💪',
+          'Your workout has been running for $_overdueMinutes minutes. Time to wrap up!',
+          tzFire,
+          details,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } catch (e2, st2) {
+        debugPrint('zonedSchedule recovery failed: $e2\n$st2');
+      }
+    }
   }
 
   @override
   Future<void> cancelWorkoutAlert(int workoutId) async {
-    await _plugin.cancel(workoutId);
+    try {
+      await _plugin.cancel(workoutId);
+    } on PlatformException catch (e, st) {
+      debugPrint('cancel notification failed: ${e.message}\n$st');
+    }
   }
 }
