@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gymapp/database/app_database.dart';
 import 'package:gymapp/providers/providers.dart';
@@ -22,6 +23,14 @@ class FakeSyncService extends SyncService {
 }
 
 class MockWorkoutRepository extends Mock implements WorkoutRepository {}
+
+class MockSyncService extends Mock implements SyncService {}
+
+class TrackingSyncService extends FakeSyncService {
+  TrackingSyncService(super.db);
+  int syncAllCalls = 0;
+  @override Future<void> syncAll() async => syncAllCalls++;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +59,24 @@ LoggedSet _loggedSet({int id = 1, double weight = 80, int reps = 8}) => LoggedSe
       restSeconds: 0,
       completedAt: DateTime(2024, 1, 10, 9, 10),
       lastModifiedAt: DateTime(2024, 1, 10, 9, 10),
+      syncStatus: 0,
+      isDeleted: false,
+    );
+
+WorkoutExerciseEntry _workoutExerciseEntry({
+  int id = 10,
+  int exerciseId = 1,
+  String notes = '',
+}) =>
+    WorkoutExerciseEntry(
+      id: id,
+      clientId: 'we-client-$id',
+      workoutId: 1,
+      exerciseId: exerciseId,
+      displayOrder: 0,
+      notes: notes,
+      useLbs: null,
+      lastModifiedAt: DateTime(2024, 1, 10),
       syncStatus: 0,
       isDeleted: false,
     );
@@ -139,9 +166,12 @@ void main() {
 
   group('History Screen — edit mode', () {
     late MockWorkoutRepository workoutRepo;
+    late MockSyncService mockSync;
 
     setUp(() {
       workoutRepo = MockWorkoutRepository();
+      mockSync = MockSyncService();
+      when(() => mockSync.syncAll()).thenAnswer((_) async {});
       when(() => workoutRepo.watchAll()).thenAnswer(
         (_) => Stream.value([_completedWorkout()]),
       );
@@ -160,10 +190,16 @@ void main() {
           .thenAnswer((_) async {});
     });
 
+    List<Override> editOverrides(List<Override> extra) => [
+          syncServiceProvider.overrideWithValue(mockSync),
+          workoutRepositoryProvider.overrideWithValue(workoutRepo),
+          ...extra,
+        ];
+
     testWidgets('history screen renders completed workouts', (tester) async {
       await tester.pumpApp(
         const HistoryScreen(),
-        overrides: [
+        overrides: editOverrides([
           workoutsProvider.overrideWith(
             (ref) => Stream.value([_completedWorkout()]),
           ),
@@ -176,8 +212,7 @@ void main() {
           exercisesProvider.overrideWith(
             (ref) => Stream.value([]),
           ),
-          workoutRepositoryProvider.overrideWithValue(workoutRepo),
-        ],
+        ]),
       );
 
       await tester.pump();
@@ -188,7 +223,7 @@ void main() {
     testWidgets('edit button appears on each workout card', (tester) async {
       await tester.pumpApp(
         const HistoryScreen(),
-        overrides: [
+        overrides: editOverrides([
           workoutsProvider.overrideWith(
             (ref) => Stream.value([_completedWorkout()]),
           ),
@@ -201,8 +236,7 @@ void main() {
           exercisesProvider.overrideWith(
             (ref) => Stream.value([]),
           ),
-          workoutRepositoryProvider.overrideWithValue(workoutRepo),
-        ],
+        ]),
       );
 
       await tester.pump();
@@ -213,7 +247,7 @@ void main() {
         (tester) async {
       await tester.pumpApp(
         const HistoryScreen(),
-        overrides: [
+        overrides: editOverrides([
           workoutsProvider.overrideWith(
             (ref) => Stream.value([_completedWorkout()]),
           ),
@@ -226,8 +260,7 @@ void main() {
           exercisesProvider.overrideWith(
             (ref) => Stream.value([]),
           ),
-          workoutRepositoryProvider.overrideWithValue(workoutRepo),
-        ],
+        ]),
       );
 
       await tester.pump();
@@ -241,7 +274,7 @@ void main() {
     testWidgets('saving edit calls updateSet with new values', (tester) async {
       await tester.pumpApp(
         const HistoryScreen(),
-        overrides: [
+        overrides: editOverrides([
           workoutsProvider.overrideWith(
             (ref) => Stream.value([_completedWorkout()]),
           ),
@@ -254,8 +287,7 @@ void main() {
           exercisesProvider.overrideWith(
             (ref) => Stream.value([]),
           ),
-          workoutRepositoryProvider.overrideWithValue(workoutRepo),
-        ],
+        ]),
       );
 
       await tester.pump();
@@ -280,7 +312,7 @@ void main() {
     testWidgets('cancel edit reverts to read-only display', (tester) async {
       await tester.pumpApp(
         const HistoryScreen(),
-        overrides: [
+        overrides: editOverrides([
           workoutsProvider.overrideWith(
             (ref) => Stream.value([_completedWorkout()]),
           ),
@@ -293,8 +325,7 @@ void main() {
           exercisesProvider.overrideWith(
             (ref) => Stream.value([]),
           ),
-          workoutRepositoryProvider.overrideWithValue(workoutRepo),
-        ],
+        ]),
       );
 
       await tester.pump();
@@ -315,6 +346,140 @@ void main() {
             weight: any(named: 'weight'),
             reps: any(named: 'reps'),
           ));
+    });
+
+    testWidgets('cancel discards typed changes on re-enter edit', (tester) async {
+      await tester.pumpApp(
+        const HistoryScreen(),
+        overrides: editOverrides([
+          workoutsProvider.overrideWith(
+            (ref) => Stream.value([_completedWorkout()]),
+          ),
+          workoutSetsProvider.overrideWith(
+            (ref, id) => Stream.value([_loggedSet(weight: 80, reps: 8)]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
+          ),
+        ]),
+      );
+
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.edit_outlined).first);
+      await tester.pump();
+      await tester.enterText(find.byType(TextFormField).first, '90');
+      await tester.pump();
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.edit_outlined).first);
+      await tester.pump();
+
+      final field = tester.widget<TextFormField>(
+        find.byType(TextFormField).first,
+      );
+      expect(field.controller!.text, '80');
+    });
+
+    testWidgets('invalid weight blocks save and keeps edit mode', (tester) async {
+      await tester.pumpApp(
+        const HistoryScreen(),
+        overrides: editOverrides([
+          workoutsProvider.overrideWith(
+            (ref) => Stream.value([_completedWorkout()]),
+          ),
+          workoutSetsProvider.overrideWith(
+            (ref, id) => Stream.value([_loggedSet()]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
+          ),
+        ]),
+      );
+
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.edit_outlined).first);
+      await tester.pump();
+      await tester.enterText(find.byType(TextFormField).first, 'abc');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+
+      expect(find.text('Cancel'), findsOneWidget);
+      verifyNever(() => workoutRepo.updateSet(
+            any(),
+            weight: any(named: 'weight'),
+            reps: any(named: 'reps'),
+          ));
+    });
+
+    testWidgets('saving notes calls updateWorkoutExerciseNotes', (tester) async {
+      await tester.pumpApp(
+        const HistoryScreen(),
+        overrides: editOverrides([
+          workoutsProvider.overrideWith(
+            (ref) => Stream.value([_completedWorkout()]),
+          ),
+          workoutSetsProvider.overrideWith(
+            (ref, id) => Stream.value([_loggedSet()]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([_workoutExerciseEntry()]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
+          ),
+        ]),
+      );
+
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.edit_outlined).first);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextFormField), findsNWidgets(3));
+      await tester.enterText(find.byType(TextFormField).at(0), 'Focus on form');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+
+      verify(() => workoutRepo.updateWorkoutExerciseNotes(10, 'Focus on form'))
+          .called(1);
+    });
+
+    testWidgets('successful save triggers syncAll', (tester) async {
+      final sync = TrackingSyncService(AppDatabase(NativeDatabase.memory()));
+
+      await tester.pumpApp(
+        const HistoryScreen(),
+        overrides: [
+          syncServiceProvider.overrideWithValue(sync),
+          workoutRepositoryProvider.overrideWithValue(workoutRepo),
+          workoutsProvider.overrideWith(
+            (ref) => Stream.value([_completedWorkout()]),
+          ),
+          workoutSetsProvider.overrideWith(
+            (ref, id) => Stream.value([_loggedSet()]),
+          ),
+          workoutExercisesProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
+          exercisesProvider.overrideWith(
+            (ref) => Stream.value([]),
+          ),
+        ],
+      );
+
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.edit_outlined).first);
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+
+      expect(sync.syncAllCalls, 1);
     });
   });
 }
