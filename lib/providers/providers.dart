@@ -8,6 +8,7 @@ import '../repositories/repositories.dart';
 import '../services/sync_service.dart';
 import '../services/supabase_service.dart';
 import '../services/notification_service.dart';
+import '../services/workout_overdue_service.dart';
 import '../utils/one_rm_calculator.dart';
 
 // Overridden in `main.dart` at app startup with the real SharedPreferences
@@ -54,6 +55,15 @@ final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
     ref.watch(syncServiceProvider),
     notificationService: ref.watch(notificationServiceProvider),
   );
+});
+
+final workoutOverdueServiceProvider = Provider<WorkoutOverdueService>((ref) {
+  final service = WorkoutOverdueService(
+    ref.watch(workoutRepositoryProvider),
+    ref.watch(notificationServiceProvider),
+  );
+  ref.onDispose(service.stopWatching);
+  return service;
 });
 
 // ─── Exercise providers ──────────────────────────────────────────────────────

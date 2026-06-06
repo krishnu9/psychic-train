@@ -4,6 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
 
+import '../utils/workout_duration.dart';
+
 abstract class NotificationService {
   Future<void> initialize();
   Future<void> scheduleWorkoutOverdueAlert(
@@ -34,7 +36,6 @@ class NullNotificationService implements NotificationService {
 class LocalNotificationService implements NotificationService {
   static const _channelId = 'workout_alerts';
   static const _channelName = 'Workout Alerts';
-  static const _overdueMinutes = 90;
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -61,6 +62,12 @@ class LocalNotificationService implements NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.requestNotificationsPermission();
+
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, sound: true);
   }
 
   @override
@@ -68,7 +75,7 @@ class LocalNotificationService implements NotificationService {
     int workoutId, {
     required DateTime startTime,
   }) async {
-    final fireAt = startTime.add(const Duration(minutes: _overdueMinutes));
+    final fireAt = startTime.add(kWorkoutMaxDuration);
     if (fireAt.isBefore(DateTime.now())) return;
 
     final tzFire = tz.TZDateTime.from(fireAt, tz.local);
@@ -85,13 +92,14 @@ class LocalNotificationService implements NotificationService {
     try {
       await _plugin.zonedSchedule(
         workoutId,
-        'Still at it? 💪',
-        'Your workout has been running for $_overdueMinutes minutes. Time to wrap up!',
+        'Workout time limit reached',
+        'Your workout hit the ${kWorkoutMaxDuration.inMinutes}-minute limit and was saved automatically.',
         tzFire,
         details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
+        payload: workoutId.toString(),
       );
     } on PlatformException catch (e, st) {
       debugPrint('zonedSchedule failed: ${e.message}\n$st');
@@ -103,13 +111,14 @@ class LocalNotificationService implements NotificationService {
         await _plugin.cancelAll();
         await _plugin.zonedSchedule(
           workoutId,
-          'Still at it? 💪',
-          'Your workout has been running for $_overdueMinutes minutes. Time to wrap up!',
+          'Workout time limit reached',
+          'Your workout hit the ${kWorkoutMaxDuration.inMinutes}-minute limit and was saved automatically.',
           tzFire,
           details,
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
+          payload: workoutId.toString(),
         );
       } catch (e2, st2) {
         debugPrint('zonedSchedule recovery failed: $e2\n$st2');

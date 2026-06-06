@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,11 +18,12 @@ void main() async {
   );
 
   final prefs = await SharedPreferences.getInstance();
+  final notifications = LocalNotificationService();
 
   // Initialise notifications (requests permissions on first run). Notification
   // setup should never prevent the app from showing its first screen.
   try {
-    await LocalNotificationService().initialize();
+    await notifications.initialize();
   } catch (error, stackTrace) {
     FlutterError.reportError(
       FlutterErrorDetails(
@@ -38,7 +38,10 @@ void main() async {
 
   runApp(
     ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        notificationServiceProvider.overrideWithValue(notifications),
+      ],
       child: const GymApp(),
     ),
   );

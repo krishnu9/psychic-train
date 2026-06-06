@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,9 +23,11 @@ class AppShell extends ConsumerStatefulWidget {
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends ConsumerState<AppShell> {
+class _AppShellState extends ConsumerState<AppShell>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _hasPromptedResume = false;
+  int? _watchedWorkoutId;
 
   late final List<Widget> _screens = [
     HomeScreen(onNavigate: _navigateToTab),
@@ -32,6 +36,28 @@ class _AppShellState extends ConsumerState<AppShell> {
     const HistoryScreen(),
     const SettingsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final workout = ref.read(incompleteWorkoutProvider).valueOrNull;
+      if (workout != null) {
+        unawaited(_processIncompleteWorkout(workout, showResumeDialog: false));
+      }
+    }
+  }
 
   void _navigateToTab(int index) {
     if (!mounted) return;
@@ -45,6 +71,45 @@ class _AppShellState extends ConsumerState<AppShell> {
     _NavItem(icon: Icons.history_rounded, label: 'History'),
     _NavItem(icon: Icons.settings_rounded, label: 'Settings'),
   ];
+
+  void _showAutoFinishSnackBar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Workout auto-finished after 90 minutes'),
+      ),
+    );
+  }
+
+  Future<void> _processIncompleteWorkout(
+    Workout workout, {
+    required bool showResumeDialog,
+    AsyncValue<Workout?>? prev,
+  }) async {
+    final overdueService = ref.read(workoutOverdueServiceProvider);
+    final autoFinished = await overdueService.ensureScheduled(workout);
+    if (!mounted) return;
+
+    if (autoFinished) {
+      _showAutoFinishSnackBar();
+      return;
+    }
+
+    if (_watchedWorkoutId != workout.id) {
+      _watchedWorkoutId = workout.id;
+      overdueService.startWatching(workout, _showAutoFinishSnackBar);
+    }
+
+    if (showResumeDialog &&
+        !_hasPromptedResume &&
+        prev?.isLoading == true &&
+        !ref.read(workoutMinimizedProvider)) {
+      _hasPromptedResume = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showResumeWorkoutDialog(workout);
+      });
+    }
+  }
 
   Future<void> _showResumeWorkoutDialog(Workout workout) async {
     if (!mounted) return;
@@ -103,21 +168,23 @@ class _AppShellState extends ConsumerState<AppShell> {
       await syncService.syncDown();
       await syncService.syncAll();
     });
-    // Listen for incomplete workouts to prompt resume
+
     ref.listen<AsyncValue<Workout?>>(incompleteWorkoutProvider, (prev, next) {
       final workout = next.valueOrNull;
-      if (workout != null &&
-          !_hasPromptedResume &&
-          prev?.isLoading == true &&
-          !ref.read(workoutMinimizedProvider)) {
-        _hasPromptedResume = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showResumeWorkoutDialog(workout);
-        });
-      }
-      // Auto-hide minimized bar when workout finishes (data state with null)
       if (next is AsyncData && workout == null) {
         ref.read(workoutMinimizedProvider.notifier).state = false;
+        ref.read(workoutOverdueServiceProvider).stopWatching();
+        _watchedWorkoutId = null;
+        return;
+      }
+      if (workout != null && next.hasValue) {
+        unawaited(
+          _processIncompleteWorkout(
+            workout,
+            showResumeDialog: true,
+            prev: prev,
+          ),
+        );
       }
     });
 
