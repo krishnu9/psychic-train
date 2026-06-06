@@ -42,6 +42,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   // Workout exercise data
   final List<_WorkoutExerciseData> _exerciseDataList = [];
   bool _isLoading = true;
+  bool _isClosing = false;
 
   @override
   void initState() {
@@ -529,6 +530,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       ),
     );
     if (discard == true && mounted) {
+      _isClosing = true;
       await ref.read(workoutRepositoryProvider).delete(widget.workoutId);
       if (mounted) Navigator.pop(context);
     }
@@ -681,11 +683,28 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       },
     );
 
-    if (saved == true && mounted) Navigator.pop(context);
+    if (saved == true && mounted) {
+      _isClosing = true;
+      Navigator.pop(context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<Workout?>>(incompleteWorkoutProvider, (prev, next) {
+      if (_isClosing) return;
+      final hadOurs = prev?.valueOrNull?.id == widget.workoutId;
+      final stillOurs = next.valueOrNull?.id == widget.workoutId;
+      if (hadOurs && !stillOurs && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Workout auto-finished after 90 minutes'),
+          ),
+        );
+        Navigator.pop(context);
+      }
+    });
+
     final useLbs = ref.watch(useLbsProvider);
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 

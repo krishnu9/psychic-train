@@ -6,6 +6,7 @@ export 'package:drift/drift.dart' show Value;
 import '../database/app_database.dart';
 import '../services/sync_service.dart';
 import '../services/notification_service.dart';
+import '../utils/workout_duration.dart';
 
 // Sentinel used to distinguish "argument not passed" from "explicitly null"
 // for nullable tri-state parameters (e.g. useLbs: true/false/null).
@@ -328,6 +329,14 @@ class WorkoutRepository {
     if (w != null) {
       unawaited(_sync.syncAll());
     }
+  }
+
+  /// Finishes the workout when it has exceeded [kWorkoutMaxDuration].
+  /// Returns `true` if the workout was auto-finished.
+  Future<bool> finishIfOverdue(int id, {required DateTime startTime}) async {
+    if (!isWorkoutOverdue(startTime)) return false;
+    await finish(id, notes: 'Auto-finished after 90 minutes');
+    return true;
   }
 
   Future<void> delete(int id) async {
