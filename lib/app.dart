@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'theme/app_theme.dart';
+import 'design_system/design_system.dart';
 import 'screens/app_shell.dart';
 
 class GymApp extends StatelessWidget {
@@ -10,7 +10,7 @@ class GymApp extends StatelessWidget {
     return MaterialApp(
       title: 'GymApp',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.dark,
       home: const AppShell(),
     );
   }
