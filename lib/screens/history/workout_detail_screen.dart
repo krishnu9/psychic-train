@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../database/app_database.dart';
@@ -37,6 +39,19 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
 
   @override
   void dispose() {
+    _clearControllers();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant WorkoutDetails oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isEditing && !widget.isEditing) {
+      _clearControllers();
+    }
+  }
+
+  void _clearControllers() {
     for (final c in _weightCtrls.values) {
       c.dispose();
     }
@@ -46,7 +61,9 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
     for (final c in _notesCtrls.values) {
       c.dispose();
     }
-    super.dispose();
+    _weightCtrls.clear();
+    _repsCtrls.clear();
+    _notesCtrls.clear();
   }
 
   void _initControllers(List<LoggedSet> sets, Map<int, bool> unitByExercise,
@@ -72,21 +89,46 @@ class _WorkoutDetailsState extends ConsumerState<WorkoutDetails> {
 
   Future<void> _saveEdits(List<LoggedSet> sets, Map<int, bool> unitByExercise,
       List<WorkoutExerciseEntry> weList) async {
-    final workoutRepo = ref.read(workoutRepositoryProvider);
     for (final s in sets) {
       final typed = double.tryParse(_weightCtrls[s.id]?.text ?? '');
       final reps = int.tryParse(_repsCtrls[s.id]?.text ?? '');
-      if (typed != null && reps != null) {
-        final useLbs = unitByExercise[s.exerciseId] ?? widget.useLbs;
-        final kg = useLbs ? lbsToKg(typed) : typed;
-        await workoutRepo.updateSet(s.id, weight: kg, reps: reps);
+      if (typed == null || reps == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Fix invalid weight/reps before saving'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
       }
+    }
+
+    final workoutRepo = ref.read(workoutRepositoryProvider);
+    for (final s in sets) {
+      final typed = double.parse(_weightCtrls[s.id]!.text);
+      final reps = int.parse(_repsCtrls[s.id]!.text);
+      final useLbs = unitByExercise[s.exerciseId] ?? widget.useLbs;
+      final kg = useLbs ? lbsToKg(typed) : typed;
+      await workoutRepo.updateSet(s.id, weight: kg, reps: reps);
     }
     for (final we in weList) {
       final notes = _notesCtrls[we.id]?.text ?? '';
       if (notes != we.notes) {
         await workoutRepo.updateWorkoutExerciseNotes(we.id, notes);
       }
+    }
+
+    unawaited(ref.read(syncServiceProvider).syncAll());
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Workout updated'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
     widget.onEditDone();
   }

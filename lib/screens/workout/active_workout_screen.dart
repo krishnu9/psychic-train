@@ -90,6 +90,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         await _restoreRoutineWithProgress(existingSets, weMap);
       } else if (existingSets.isNotEmpty) {
         await _restoreFromLoggedSets(existingSets, weMap);
+      } else if (widget.routineId == null && weMap.isNotEmpty) {
+        await _loadWorkoutExercisesFromDb(weMap);
       } else {
         await _loadRoutineExercises(weMap);
       }
@@ -244,6 +246,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       );
     }
 
+    await _appendUnloggedWorkoutExercises(weMap);
+
     if (weMap.isNotEmpty) {
       _exerciseDataList.sort((a, b) {
         final aOrder = weMap[a.exercise.id]?.displayOrder ?? 0;
@@ -253,6 +257,87 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     }
 
     setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadWorkoutExercisesFromDb(
+    Map<int, WorkoutExerciseEntry> weMap,
+  ) async {
+    final exerciseRepo = ref.read(exerciseRepositoryProvider);
+    final workoutRepo = ref.read(workoutRepositoryProvider);
+
+    final sorted = weMap.values.toList()
+      ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+
+    for (final we in sorted) {
+      final exercise = await exerciseRepo.getById(we.exerciseId);
+      if (exercise == null) continue;
+
+      final lastSets = await workoutRepo.getLastSetsForExercise(we.exerciseId);
+      _exerciseDataList.add(
+        _WorkoutExerciseData(
+          exercise: exercise,
+          sets: List.generate(3, (i) {
+            final last = lastSets
+                .where((s) => s.setNumber == i + 1)
+                .firstOrNull;
+            return _SetData(
+              setNumber: i + 1,
+              weight: last?.weight ?? 0,
+              reps: last?.reps ?? 10,
+            );
+          }),
+          lastSets: lastSets,
+          workoutExerciseId: we.id,
+          notes: we.notes,
+          useLbsOverride: we.useLbs,
+        ),
+      );
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _appendUnloggedWorkoutExercises(
+    Map<int, WorkoutExerciseEntry> weMap,
+  ) async {
+    if (weMap.isEmpty) return;
+
+    final loadedIds = _exerciseDataList.map((e) => e.exercise.id).toSet();
+    final sortedUnlogged = weMap.values
+        .where((we) => !loadedIds.contains(we.exerciseId))
+        .toList()
+      ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+
+    if (sortedUnlogged.isEmpty) return;
+
+    final exerciseRepo = ref.read(exerciseRepositoryProvider);
+    final workoutRepo = ref.read(workoutRepositoryProvider);
+
+    for (final we in sortedUnlogged) {
+      final exercise = await exerciseRepo.getById(we.exerciseId);
+      if (exercise == null) continue;
+
+      final lastSets = await workoutRepo.getLastSetsForExercise(we.exerciseId);
+      _exerciseDataList.add(
+        _WorkoutExerciseData(
+          exercise: exercise,
+          sets: List.generate(3, (i) {
+            final last = lastSets
+                .where((s) => s.setNumber == i + 1)
+                .firstOrNull;
+            return _SetData(
+              setNumber: i + 1,
+              weight: last?.weight ?? 0,
+              reps: last?.reps ?? 10,
+            );
+          }),
+          lastSets: lastSets,
+          workoutExerciseId: we.id,
+          notes: we.notes,
+          useLbsOverride: we.useLbs,
+        ),
+      );
+    }
   }
 
   Future<void> _loadRoutineExercises(
@@ -536,8 +621,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     }
   }
 
-  Future<void> _saveAsRoutine() async {
-    if (_exerciseDataList.isEmpty) return;
+  Future<String?> _promptRoutineName() async {
     final nameCtrl = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -566,34 +650,18 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       ),
     );
     nameCtrl.dispose();
+    return name;
+  }
+
+  Future<void> _saveAsRoutine() async {
+    if (_exerciseDataList.isEmpty) return;
+    final name = await _promptRoutineName();
     if (name == null || !mounted) return;
 
-    final routineRepo = ref.read(routineRepositoryProvider);
-    final routineId = await routineRepo.create(name: name);
-    for (var i = 0; i < _exerciseDataList.length; i++) {
-      final ex = _exerciseDataList[i];
-      final completedSets = ex.sets.where((s) => s.isCompleted).toList();
-      final targetSets = ex.sets.length;
-      final targetReps = completedSets.isNotEmpty
-          ? (completedSets.map((s) => s.reps).reduce((a, b) => a + b) ~/
-                completedSets.length)
-          : 10;
-      final targetWeight = completedSets.isNotEmpty
-          ? completedSets.map((s) => s.weight).reduce((a, b) => a + b) /
-                completedSets.length
-          : 0.0;
-      await routineRepo.addExercise(
-        routineId,
-        ex.exercise.id,
-        i,
-        sets: targetSets,
-        reps: targetReps,
-        weight: targetWeight,
-        sectionName: ex.sectionName,
-        notes: ex.notes,
-        useLbs: ex.useLbsOverride,
-      );
-    }
+    await ref
+        .read(routineRepositoryProvider)
+        .createFromWorkout(widget.workoutId, name: name);
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -617,6 +685,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
               .where((s) => s.isCompleted)
               .fold<double>(0, (s, set) => s + set.weight * set.reps),
     );
+
+    final showSaveAsRoutine =
+        widget.routineId == null && _exerciseDataList.isNotEmpty;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -653,6 +724,30 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     isSaving ? null : () => Navigator.pop(ctx, false),
                 child: const Text('Continue'),
               ),
+              if (showSaveAsRoutine)
+                TextButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final name = await _promptRoutineName();
+                          if (name == null || !ctx.mounted) return;
+                          await ref
+                              .read(routineRepositoryProvider)
+                              .createFromWorkout(
+                                widget.workoutId,
+                                name: name,
+                              );
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text('Saved as routine "$name"'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                  child: const Text('Save as Routine'),
+                ),
               ElevatedButton(
                 onPressed: isSaving
                     ? null
@@ -724,6 +819,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                   // ─── Header ─────────────────────────────
                   _WorkoutHeader(
                     elapsed: _elapsed,
+                    exerciseCount: _exerciseDataList.length,
                     onFinish: _finishWorkout,
                     onCancel: _cancelWorkout,
                     onMinimize: _minimizeWorkout,
@@ -974,6 +1070,7 @@ class _SetData {
 
 class _WorkoutHeader extends StatelessWidget {
   final String elapsed;
+  final int exerciseCount;
   final VoidCallback onFinish;
   final VoidCallback onCancel;
   final VoidCallback onMinimize;
@@ -981,6 +1078,7 @@ class _WorkoutHeader extends StatelessWidget {
 
   const _WorkoutHeader({
     required this.elapsed,
+    required this.exerciseCount,
     required this.onFinish,
     required this.onCancel,
     required this.onMinimize,
@@ -1048,7 +1146,17 @@ class _WorkoutHeader extends StatelessWidget {
               size: 24,
             ),
           ),
-          // Save as Routine
+          if (exerciseCount > 0)
+            IconButton(
+              onPressed: onSaveAsRoutine,
+              tooltip: 'Save as Routine',
+              icon: const Icon(
+                Icons.bookmark_add_outlined,
+                color: AppColors.textMuted,
+                size: 22,
+              ),
+            ),
+          // Save as Routine (overflow)
           PopupMenuButton<String>(
             icon: const Icon(
               Icons.more_vert_rounded,

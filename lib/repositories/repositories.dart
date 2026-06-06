@@ -165,6 +165,67 @@ class RoutineRepository {
     return newId;
   }
 
+  /// Creates a routine from a workout's exercises and logged sets.
+  /// Reads from the DB so save works even after resume/reload.
+  Future<int> createFromWorkout(int workoutId, {required String name}) async {
+    final routineId = await create(name: name);
+
+    final workoutExercises = await _db.getWorkoutExercises(workoutId);
+    workoutExercises.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+
+    final loggedSets = await _db.getLoggedSets(workoutId);
+    final setsByExercise = <int, List<LoggedSet>>{};
+    for (final s in loggedSets) {
+      setsByExercise.putIfAbsent(s.exerciseId, () => []).add(s);
+    }
+
+    final weExerciseIds = workoutExercises.map((we) => we.exerciseId).toSet();
+    final orderedExerciseIds = [
+      ...workoutExercises.map((we) => we.exerciseId),
+      ...setsByExercise.keys.where((id) => !weExerciseIds.contains(id)),
+    ];
+
+    var order = 0;
+    for (final exerciseId in orderedExerciseIds) {
+      final we = workoutExercises
+          .where((w) => w.exerciseId == exerciseId)
+          .firstOrNull;
+      final completedSets = setsByExercise[exerciseId] ?? [];
+
+      final targetSets =
+          completedSets.isNotEmpty ? completedSets.length : 3;
+      final targetReps = completedSets.isNotEmpty
+          ? (completedSets.map((s) => s.reps).reduce((a, b) => a + b) ~/
+              completedSets.length)
+          : 10;
+      final targetWeight = completedSets.isNotEmpty
+          ? completedSets.map((s) => s.weight).reduce((a, b) => a + b) /
+              completedSets.length
+          : 0.0;
+
+      final entryId = await addExercise(
+        routineId,
+        exerciseId,
+        order,
+        sets: targetSets,
+        reps: targetReps,
+        weight: targetWeight,
+        notes: we?.notes ?? '',
+        useLbs: we?.useLbs,
+      );
+      order++;
+
+      final entry = (await getExercises(routineId))
+          .where((e) => e.id == entryId)
+          .firstOrNull;
+      if (entry != null && await _sync.pushRoutineExercise(entry)) {
+        await _db.markSynced('routine_exercises', entryId);
+      }
+    }
+
+    return routineId;
+  }
+
   // Routine exercises
   Future<List<RoutineExerciseEntry>> getExercises(int routineId) =>
       _db.getRoutineExercises(routineId);
